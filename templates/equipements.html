@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Équipements{% endblock %}
+{% block body_attrs %}data-page="equipements"{% endblock %}
+{% block topbar_title %}Stock <span style="color:var(--red)">équipements</span>{% endblock %}
+{% block content %}
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <button class="btn btn-red" onclick="openModal('modal-equip')">+ Nouvel équipement</button>
+  <button class="btn btn-ghost" onclick="chargerBase()">Charger les équipements de base</button>
+</div>
+
+<div class="info-box" style="margin-bottom:16px;">
+  Stock des équipements utilisés pour préparer/équiper les véhicules (extincteurs, tapis, chasubles, cric, caisse à outils…). Distinct de la checklist par véhicule dans Stock véhicule.
+</div>
+
+<div class="table-wrap card" style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Équipement</th><th>Conditionnement</th><th>Cartons complets</th><th>Pièces isolées</th><th>Total pièces</th><th>Actions</th></tr>
+    </thead>
+    <tbody id="equip-body"><tr><td colspan="6" class="empty-state">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<!-- MODAL — Nouvel équipement -->
+<div class="modal-bg" id="modal-equip">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">NOUVEL ÉQUIPEMENT</div><button class="modal-close" onclick="closeModal('modal-equip')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Nom de l'équipement</label><input type="text" id="ne-nom" placeholder="Ex : Extincteur, Triangle, Gilet…"></div>
+      <div class="form-group"><label>Pièces par carton (1 si vendu à l'unité)</label><input type="number" id="ne-parcarton" min="1" value="1"></div>
+      <div class="form-group"><label>Stock initial (en pièces)</label><input type="number" id="ne-stock" min="0" value="0"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-equip')">Annuler</button>
+      <button class="btn btn-red" onclick="creerEquipement()">Créer</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>window.EQUIPEMENTS_BASE = {{ equipements_base | tojson }};</script>
+<script type="module" src="/static/js/equipements.js"></script>
+{% endblock %}

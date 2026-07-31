@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Véhicules vendus{% endblock %}
+{% block body_attrs %}data-page="vendus"{% endblock %}
+{% block topbar_title %}Véhicules <span style="color:var(--red)">vendus</span>{% endblock %}
+{% block content %}
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <button class="btn btn-ghost" onclick="exporterCSV()">↓ CSV</button>
+  <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Filtres</div></div>
+  <div style="padding:14px 18px;">
+    <div class="form-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;">
+      <div class="form-group" style="margin-bottom:0;"><label>Recherche (client, châssis, modèle)</label><input type="text" id="f-recherche"></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Emplacement</label><select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Période (date d'achat)</label>
+        <select id="f-periode">
+          <option value="">Toutes</option>
+          <option value="jour">Aujourd'hui</option>
+          <option value="semaine">Cette semaine</option>
+          <option value="mois">Ce mois</option>
+          <option value="trimestre">Ce trimestre</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap card" style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Client</th><th>Contact</th><th>Date entrée</th><th>Date sortie</th><th>Prix</th></tr>
+    </thead>
+    <tbody id="vendus-body"><tr><td colspan="8" class="empty-state">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<div id="pdf-content" style="display:none"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/vendus.js"></script>
+{% endblock %}

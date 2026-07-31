@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block body_attrs %}data-page="dashboard"{% endblock %}
+{% block topbar_title %}Tableau de <span style="color:var(--red)">bord</span>{% endblock %}
+{% block content %}
+{% macro filtres(prefix) %}
+<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+  <select id="{{ prefix }}-marque" class="filtre-mini"><option value="">Toutes marques</option></select>
+  <select id="{{ prefix }}-modele" class="filtre-mini"><option value="">Tous modèles</option></select>
+  <select id="{{ prefix }}-emplacement" class="filtre-mini"><option value="">Tous emplacements</option></select>
+  <button class="btn btn-ghost btn-sm" data-download="{{ prefix }}" title="Télécharger en image">⬇ Image</button>
+</div>
+{% endmacro %}
+
+<div class="kpi-row">
+  <div class="kpi-box"><div class="kpi-val" id="kpi-parc">—</div><div class="kpi-lbl">Véhicules dans le parc</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:var(--orange)" id="kpi-reserve">—</div><div class="kpi-lbl">Réservés</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:var(--blue)" id="kpi-vendu">—</div><div class="kpi-lbl">Vendus</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:var(--red)" id="kpi-endommage">—</div><div class="kpi-lbl">Endommagés</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Évolution des <span>entrées / sorties</span> du parc</div>
+    {{ filtres('flux') }}
+  </div>
+  <div style="padding:14px;height:220px"><canvas id="chart-flux"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Véhicules <span>endommagés</span> par marque</div>
+    {{ filtres('dommages') }}
+  </div>
+  <div style="padding:14px;height:220px"><canvas id="chart-dommages"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Top 10 <span>clients</span> — nombre de véhicules</div>
+    {{ filtres('top10') }}
+  </div>
+  <div style="padding:14px 18px" id="top10-list">Chargement…</div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Évolution des <span>ventes</span> sur l'année</div>
+    {{ filtres('ventes') }}
+  </div>
+  <div style="padding:14px;height:220px"><canvas id="chart-ventes"></canvas></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  window.MARQUES = {{ marques | tojson }};
+  window.EMPLACEMENTS = {{ emplacements | tojson }};
+</script>
+<script type="module" src="/static/js/dashboard.js"></script>
+{% endblock %}

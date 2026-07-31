@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Stock véhicule{% endblock %}
+{% block body_attrs %}data-page="stock"{% endblock %}
+{% block topbar_title %}Stock <span style="color:var(--red)">véhicule</span>{% endblock %}
+{% block content %}
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <button class="btn btn-red" onclick="openNouveauVehicule()">+ Nouveau véhicule</button>
+  <button class="btn btn-ghost" onclick="openModal('modal-import')">↑ Importer (CSV/PDF)</button>
+  <button class="btn btn-ghost" onclick="exporterCSV()">↓ CSV</button>
+  <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
+</div>
+
+<!-- Indicateurs par emplacement -->
+<div class="kpi-row" id="site-indicators">
+  <div class="site-card site-broli"><div class="kpi-val" id="site-broli">—</div><div class="kpi-lbl">Parc Broli</div></div>
+  <div class="site-card site-douala"><div class="kpi-val" id="site-douala">—</div><div class="kpi-lbl">Showroom Douala</div></div>
+  <div class="site-card site-yaounde"><div class="kpi-val" id="site-yaounde">—</div><div class="kpi-lbl">Showroom Yaoundé</div></div>
+  <div class="site-card site-bafoussam"><div class="kpi-val" id="site-bafoussam">—</div><div class="kpi-lbl">Showroom Bafoussam</div></div>
+</div>
+
+<!-- Filtres -->
+<div class="card">
+  <div class="card-header"><div class="card-title">Filtres</div></div>
+  <div style="padding:14px 18px;">
+    <div class="form-grid" style="grid-template-columns:repeat(6,1fr);gap:10px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Recherche (nom, châssis, immat.)</label>
+        <input type="text" id="f-recherche" placeholder="6 derniers du châssis, modèle…">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Marque</label>
+        <select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Modèle</label>
+        <select id="f-modele"><option value="">Tous</option></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Emplacement</label>
+        <select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Date d'entrée</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Période</label>
+        <select id="f-periode">
+          <option value="">Toutes</option>
+          <option value="jour">Aujourd'hui</option>
+          <option value="semaine">Cette semaine</option>
+          <option value="mois">Ce mois</option>
+          <option value="trimestre">Ce trimestre</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tableau -->
+<div class="table-wrap card" style="overflow-x:auto;">
+  <table id="tableau-stock">
+    <thead>
+      <tr>
+        <th>Châssis (6 derniers)</th><th>Marque</th><th>Modèle</th><th>Type</th>
+        <th>Emplacement</th><th>Couleurs</th><th>Année</th><th>Statut</th>
+        <th>Prix</th><th>Entrée</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="stock-body"><tr><td colspan="11" class="empty-state">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<!-- MODAL — Ajout / édition véhicule -->
+<div class="modal-bg" id="modal-vehicule">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-vehicule-title">NOUVEAU VÉHICULE</div><button class="modal-close" onclick="closeModal('modal-vehicule')">✕</button></div>
+    <div class="modal-body">
+      <form id="form-vehicule">
+        <input type="hidden" id="v-id">
+        <div class="section-lbl">Identification</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Châssis (VIN)</label><input type="text" id="v-chassis" required></div>
+          <div class="form-group"><label>Immatriculation</label><input type="text" id="v-immatriculation"></div>
+          <div class="form-group"><label>Marque</label><select id="v-marque" onchange="onMarqueChange()">{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Modèle</label><select id="v-modele" required></select></div>
+          <div class="form-group"><label>Type</label><select id="v-type">{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Année</label><input type="number" id="v-annee" min="1990" max="2100"></div>
+          <div class="form-group"><label>Couleur extérieure</label><input type="text" id="v-couleurExt" list="liste-couleurs" placeholder="Ex : Rouge, Gris métallisé…"></div>
+          <div class="form-group"><label>Couleur intérieure</label><input type="text" id="v-couleurInt" list="liste-couleurs" placeholder="Ex : Noir, Beige…"></div>
+          <datalist id="liste-couleurs"></datalist>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-lbl">Commercial</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Emplacement</label><select id="v-emplacement">{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Statut</label>
+            <select id="v-statut" onchange="onStatutChange()">
+              <option value="stock">En stock</option>
+              <option value="reserve">Réservé</option>
+              <option value="vendu">Vendu</option>
+              <option value="endommage">Endommagé</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="v-prix" min="0"></div>
+          <div class="form-group"><label>Kilométrage</label><input type="number" id="v-kilometrage" min="0"></div>
+          <div class="form-group"><label>Date d'entrée</label><input type="date" id="v-dateEntree"></div>
+          <div class="form-group" id="g-dateSortie" style="display:none;"><label>Date de sortie</label><input type="date" id="v-dateSortie"></div>
+        </div>
+
+        <div id="section-client" style="display:none;">
+          <div class="divider"></div>
+          <div class="section-lbl">Informations client</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Nom du client</label><input type="text" id="v-clientNom"></div>
+            <div class="form-group"><label>Contact</label><input type="text" id="v-clientContact"></div>
+            <div class="form-group"><label>Date d'achat</label><input type="date" id="v-dateAchat"></div>
+            <div class="form-group"><label>Mode de paiement</label><input type="text" id="v-modePaiement"></div>
+            <div class="form-group"><label>Vendeur / agent</label><input type="text" id="v-vendeur"></div>
+          </div>
+        </div>
+
+        <div id="section-dommages" style="display:none;">
+          <div class="divider"></div>
+          <div class="section-lbl">Pièces / parties endommagées</div>
+          <div class="form-group"><textarea id="v-pieces-endommagees" rows="3" placeholder="Ex : pare-choc avant, rétroviseur gauche, pare-brise…"></textarea></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-lbl">Équipements</div>
+        <div class="equip-grid" id="equip-grid">
+          {% for e in equipements %}
+          <label class="equip-item" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" data-equip="{{ e }}"> {{ e }}
+            <input type="number" min="0" value="1" data-equip-qty="{{ e }}" style="width:50px;margin-left:auto;">
+          </label>
+          {% endfor %}
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-vehicule')">Annuler</button>
+      <button class="btn btn-red" onclick="enregistrerVehicule()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — Import -->
+<div class="modal-bg" id="modal-import">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">IMPORTER DES VÉHICULES</div><button class="modal-close" onclick="closeModal('modal-import')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box">Colonnes attendues (CSV) : <strong>Châssis, Marque, Modèle, Type, Emplacement, Année, Prix, Date d'entrée</strong>. Formats acceptés : CSV ou PDF (tableau simple).</div>
+      <div class="form-group" style="margin-top:12px;"><label>Fichier</label><input type="file" id="import-file" accept=".csv,.pdf"></div>
+      <div id="import-status" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-import')">Annuler</button><button class="btn btn-red" onclick="importerFichier()">Importer</button></div>
+  </div>
+</div>
+
+<div id="pdf-content" style="display:none"></div>
+
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/stock.js"></script>
+{% endblock %}

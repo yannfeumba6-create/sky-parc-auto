@@ -1,0 +1,12 @@
+{
+  "name": "Sky Gestion Parc",
+  "short_name": "Sky Gestion",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#c0392b",
+  "icons": [
+    { "src": "/static/img/logo-sky-motors.jpeg", "sizes": "192x192", "type": "image/jpeg" },
+    { "src": "/static/img/logo-sky-motors.jpeg", "sizes": "512x512", "type": "image/jpeg" }
+  ]
+}

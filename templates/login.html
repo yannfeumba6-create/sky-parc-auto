@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKY GESTION PARC — Connexion</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--red:#c0392b;}
+body{min-height:100vh;font-family:'Times New Roman',Times,serif;font-size:15px;}
+#bg{position:fixed;inset:0;background-image:url('/static/img/login-bg-jetour-g700.jpg');background-size:cover;background-position:center;background-color:#1a1a2e;z-index:0;}
+#bg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.08);z-index:1;}
+.page{position:relative;z-index:2;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:70px 20px;}
+.card{background:rgba(255,255,255,.03);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1.5px solid rgba(255,255,255,.35);border-radius:22px;padding:28px 32px 24px;width:100%;max-width:400px;box-shadow:0 24px 70px rgba(0,0,0,.45);}
+.logo-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:6px;}
+.jetour-logo{height:44px;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));}
+.brand-logo{width:180px;max-width:80%;object-fit:contain;background:#fff;padding:8px 12px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.5);}
+.sky-name{font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:800;letter-spacing:3px;color:var(--red);text-shadow:0 2px 12px rgba(0,0,0,.7);text-align:center;margin-top:8px;}
+.sky-co{font-size:10px;color:rgba(255,255,255,.9);letter-spacing:2.5px;font-family:'Barlow Condensed',sans-serif;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.8);}
+.tagline{background:var(--red);color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:9.5px;letter-spacing:2.5px;padding:3px 12px;border-radius:4px;display:block;text-align:center;margin:7px auto 5px;width:fit-content;}
+.sys-lbl{font-size:11px;color:rgba(255,255,255,.95);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-bottom:14px;text-shadow:0 1px 4px rgba(0,0,0,.8);font-weight:600;}
+.div{width:24px;height:2px;background:var(--red);margin:0 auto 18px;}
+.err-box{background:rgba(192,57,43,.3);border:1.5px solid rgba(255,100,80,.6);color:#fff;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:7px;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+.form-g{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+.form-lbl{font-size:10px;color:#fff;text-transform:uppercase;letter-spacing:1px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.7);}
+.inp-w{position:relative;}
+input[type=password]{width:100%;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.4);color:#fff;padding:12px 40px 12px 14px;border-radius:9px;font-size:16px;letter-spacing:3px;font-family:'Times New Roman',Times,serif;transition:all .2s;text-align:center;}
+input:focus{outline:none;border-color:rgba(255,255,255,.85);background:rgba(255,255,255,.22);}
+input::placeholder{color:rgba(255,255,255,.55);letter-spacing:1px;}
+.eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;padding:3px;line-height:1;}
+.btn-conn{width:100%;background:var(--red);color:#fff;border:none;padding:13px;border-radius:10px;font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;transition:all .2s;margin-top:4px;box-shadow:0 4px 20px rgba(192,57,43,.6);}
+.btn-conn:hover{background:#96281b;transform:translateY(-1px);}
+.footer{position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);backdrop-filter:blur(10px);border-top:1px solid rgba(255,255,255,.1);padding:7px 16px;display:flex;align-items:center;justify-content:center;gap:10px;z-index:50;flex-wrap:wrap;}
+.f-name{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;color:#fff;opacity:.75;}
+.f-sep{width:1px;height:13px;background:rgba(255,255,255,.25);}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="bg-overlay"></div>
+<div class="page"><div class="card">
+  <div class="logo-row">
+    <img src="/static/img/logo-wordmark.png" alt="Sky Motors" class="brand-logo">
+  </div>
+  <div class="sky-name">SKY GESTION PARC</div>
+  <div class="tagline">DRIVE DIFFERENT … BE DIFFERENT</div>
+  <div class="div"></div>
+
+  {% if error %}
+  <div class="err-box"><span>⚠️</span><div><div style="font-weight:700;font-size:13px;">Mot de passe incorrect</div></div></div>
+  {% endif %}
+
+  <form method="POST" action="/login">
+    <div class="form-g">
+      <label class="form-lbl">🔑 Mot de passe</label>
+      <div class="inp-w">
+        <input type="password" name="password" id="f-pwd" placeholder="••••••" maxlength="12" autofocus required>
+        <button type="button" class="eye-btn" onclick="togglePwd()"><span id="eye-icon">👁️</span></button>
+      </div>
+    </div>
+    <button type="submit" class="btn-conn">Connexion</button>
+  </form>
+</div></div>
+
+<div class="footer">
+  <span class="f-name">JMC</span><div class="f-sep"></div>
+  <span class="f-name">SOUEAST</span><div class="f-sep"></div>
+  <span class="f-name">HOWO SINOTRUK</span>
+</div>
+
+<script>
+let _pv=false;
+function togglePwd(){_pv=!_pv;document.getElementById('f-pwd').type=_pv?'text':'password';document.getElementById('eye-icon').textContent=_pv?'🙈':'👁️';}
+</script>
+</body>
+</html>

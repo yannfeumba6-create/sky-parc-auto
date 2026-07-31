@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKY GESTION PARC — {% block title %}{% endblock %}</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/static/img/logo-sky-motors.jpeg">
+<meta name="theme-color" content="#c0392b">
+</head>
+<body {% block body_attrs %}{% endblock %}>
+
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sb-logo" style="flex-direction:column;align-items:center;padding:16px 12px;gap:6px;background:#fff;border-bottom:2px solid var(--red);">
+    <img src="/static/img/logo-wordmark.png" alt="Sky Motors Company" style="max-width:170px;width:100%;object-fit:contain;">
+    <span style="font-size:10px;color:#888;letter-spacing:1.5px;text-align:center;">SKY GESTION PARC</span>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-sec">Principal</div>
+    <a href="/dashboard" class="nav-a {{ 'active' if active_page == 'dashboard' }}">
+      <span class="ni">📊</span><span>Tableau de bord</span>
+    </a>
+    <a href="/stock" class="nav-a {{ 'active' if active_page == 'stock' }}">
+      <span class="ni">🚗</span><span>Stock véhicule</span>
+    </a>
+    <a href="/vendus" class="nav-a {{ 'active' if active_page == 'vendus' }}">
+      <span class="ni">💰</span><span>Véhicules vendus</span>
+    </a>
+    <a href="/reserves" class="nav-a {{ 'active' if active_page == 'reserves' }}">
+      <span class="ni">🔧</span><span>Réservés &amp; Endommagés</span>
+    </a>
+    <a href="/equipements" class="nav-a {{ 'active' if active_page == 'equipements' }}">
+      <span class="ni">🧰</span><span>Équipements</span>
+    </a>
+  </nav>
+
+  <div class="sb-user">
+    <div class="sb-av">PB</div>
+    <div>
+      <div class="sb-un">Parc Broli</div>
+      <div class="sb-ur">Gestion véhicules</div>
+    </div>
+    <a href="/logout" class="sb-logout" title="Déconnexion">⏻</a>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main" id="main-content">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+      <div class="tb-title">{% block topbar_title %}{% endblock %}</div>
+    </div>
+    <div class="tb-right">
+      <button class="theme-btn" onclick="toggleTheme()" id="theme-icon">🌙</button>
+    </div>
+  </div>
+
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+
+  <div class="page-footer">
+    <div class="f-logo"><span class="f-name">JETOUR</span></div>
+    <div class="f-sep"></div>
+    <div class="f-logo"><span class="f-name" style="color:#e84040">JMC</span></div>
+    <div class="f-sep"></div>
+    <div class="f-logo"><span class="f-name">SOUEAST</span></div>
+    <div class="f-sep"></div>
+    <div class="f-logo"><span class="f-name" style="color:#1a7a7a">HOWO SINOTRUK</span></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let _dark = localStorage.getItem('sg_theme') === 'dark';
+function applyTheme(){document.documentElement.setAttribute('data-theme',_dark?'dark':'light');document.getElementById('theme-icon').textContent=_dark?'☀️':'🌙';}
+function toggleTheme(){_dark=!_dark;localStorage.setItem('sg_theme',_dark?'dark':'light');applyTheme();if(typeof updateCharts==='function')updateCharts();}
+
+function toggleSidebar(){document.querySelector('.sidebar').classList.toggle('open');document.getElementById('sidebar-overlay').classList.toggle('open');}
+function closeSidebar(){document.querySelector('.sidebar').classList.remove('open');document.getElementById('sidebar-overlay').classList.remove('open');}
+document.querySelectorAll('.sidebar .nav-a').forEach(a=>a.addEventListener('click',closeSidebar));
+
+function toast(msg,type='tok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'tok');setTimeout(()=>t.className='',3200);}
+
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('click',e=>{if(e.target.classList.contains('modal-bg'))e.target.classList.remove('open');});
+
+// ── Export CSV ──
+function exportCSV(filename, headers, rows){
+  const esc = v => {v=(v===null||v===undefined)?'':String(v);v=v.replace(/"/g,'""');return /[;"\n]/.test(v)?`"${v}"`:v;};
+  let csv = '\uFEFF'+headers.map(esc).join(';')+'\n';
+  rows.forEach(r=>{csv+=r.map(esc).join(';')+'\n';});
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('Export terminé : '+filename);
+}
+
+// ── Export / impression PDF ──
+function printPDF(containerId, title){
+  const bodyHtml = document.getElementById(containerId)?.innerHTML || '';
+  window.SKY_PDF.open(title, bodyHtml, title, '', 'PARC BROLI');
+}
+
+window.SKY_PDF = {
+  css: `
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap');
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 12px; color: #1a1a1a; background: #fff; }
+    .pdf-body { padding: 14px 16mm 80px 16mm; }
+    .pdf-title-bar { background: #1a1a2e; color: #fff; padding: 7px 14px; font-size: 14px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 14px; font-family: 'Barlow Condensed', sans-serif; display: flex; justify-content: space-between; align-items: center; }
+    .pdf-title-bar .pdf-ref { font-size: 11px; color: rgba(255,255,255,.75); font-weight: 400; }
+    .pdf-title-bar .pdf-pole-tag { background: #c0392b; font-size: 9px; font-weight: 700; letter-spacing: 2px; padding: 2px 8px; border-radius: 3px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 13px; }
+    th { background: #1a1a2e; color: #fff; padding: 7px 10px; font-size: 10px; text-align: left; font-family: 'Barlow Condensed', sans-serif; letter-spacing: 1px; }
+    td { padding: 6px 10px; border-bottom: 1px solid #e8e8e8; font-size: 11px; }
+    tr { page-break-inside: avoid; }
+    tr:nth-child(even) td { background: #f9f9f9; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:9.5px; font-weight:700; }
+    .badge-green { background:#eafaf1; color:#1e8449; }
+    .badge-red { background:#fdecea; color:#c0392b; }
+    .badge-orange { background:#fef5e7; color:#d35400; }
+    .badge-blue { background:#eaf2fa; color:#2471a3; }
+    @media print { .no-print { display:none !important; } }
+  `,
+  open(title, bodyHtml, docType='', docRef='', poleTag=''){
+    const headerHtml = `<div style="background:#1a1a2e;color:#fff;padding:12px 16mm;display:flex;justify-content:space-between;align-items:center;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:#c0392b;letter-spacing:2px;">SKY MOTORS COMPANY</div><div style="font-size:9px;color:rgba(255,255,255,.7);letter-spacing:2px;">SKY GESTION PARC</div></div>`;
+    const footerHtml = `<div style="position:fixed;bottom:0;left:0;right:0;border-top:3px solid #c0392b;background:#fff;padding:6px 16mm;font-size:8px;color:#555;"><div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;color:#1a1a2e;font-size:9px;">SKY MOTORS COMPANY — SKY GESTION PARC</div></div>`;
+    const titleBarHtml = `<div class="pdf-title-bar"><span>${docType||title}</span><div style="display:flex;align-items:center;gap:10px;">${docRef?`<span class="pdf-ref">${docRef}</span>`:''} ${poleTag?`<span class="pdf-pole-tag">${poleTag}</span>`:''}<span class="pdf-ref">${new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</span></div></div>`;
+    const w=window.open('','_blank');
+    if(!w){alert('Popup bloqué — autorisez les popups pour ce site');return null;}
+    w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${title}</title><style>${this.css}</style></head><body>${headerHtml}<div class="pdf-body">${titleBarHtml}${bodyHtml}</div>${footerHtml}<script>window.onload=()=>{setTimeout(()=>window.print(),400);}<\/script></body></html>`);
+    w.document.close();return w;
+  }
+};
+
+window.addEventListener('DOMContentLoaded', applyTheme);
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

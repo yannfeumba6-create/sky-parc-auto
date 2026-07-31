@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Réservés & Endommagés{% endblock %}
+{% block body_attrs %}data-page="reserves"{% endblock %}
+{% block topbar_title %}Réservés &amp; <span style="color:var(--red)">Endommagés</span>{% endblock %}
+{% block content %}
+
+<div class="rens-tabs">
+  <button class="tab-btn active" data-tab="reserve" onclick="switchTab('reserve')">Réservés</button>
+  <button class="tab-btn" data-tab="endommage" onclick="switchTab('endommage')">Endommagés</button>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Filtres</div></div>
+  <div style="padding:14px 18px;">
+    <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div class="form-group" style="margin-bottom:0;"><label>Recherche</label><input type="text" id="f-recherche"></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Emplacement</label><select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-pane active" id="pane-reserve">
+  <div class="table-wrap card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Prix</th><th>Date entrée</th><th>Actions</th></tr></thead>
+      <tbody id="reserve-body"><tr><td colspan="7" class="empty-state">Chargement…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tab-pane" id="pane-endommage">
+  <div class="table-wrap card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Pièces endommagées</th><th>Actions</th></tr></thead>
+      <tbody id="endommage-body"><tr><td colspan="6" class="empty-state">Chargement…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/js/reserves.js"></script>
+{% endblock %}
