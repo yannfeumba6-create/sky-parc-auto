@@ -68,8 +68,10 @@ def login():
     error = False
     if request.method == "POST":
         pwd = request.form.get("password", "").strip()
-        if pwd == APP_PASSWORD:
+        nom = request.form.get("nom", "").strip()
+        if pwd == APP_PASSWORD and nom:
             session["auth"] = True
+            session["nom"] = nom
             return redirect(url_for("dashboard"))
         error = True
     return render_template("login.html", error=error)
@@ -97,6 +99,7 @@ def dashboard():
         "dashboard.html",
         marques=MARQUES,
         emplacements=EMPLACEMENTS,
+        types_vehicule=TYPES_VEHICULE,
         active_page="dashboard",
     )
 
@@ -142,7 +145,42 @@ def equipements():
     return render_template(
         "equipements.html",
         equipements_base=EQUIPEMENTS_STOCK_BASE,
+        equipements_reference=EQUIPEMENTS_REFERENCE,
         active_page="equipements",
+    )
+
+
+@app.route("/historique")
+@login_required
+def historique():
+    return render_template(
+        "historique.html",
+        marques=MARQUES,
+        emplacements=EMPLACEMENTS,
+        active_page="historique",
+    )
+
+
+@app.route("/arrivages")
+@login_required
+def arrivages():
+    return render_template(
+        "arrivages.html",
+        marques=MARQUES,
+        types_vehicule=TYPES_VEHICULE,
+        emplacements=EMPLACEMENTS,
+        equipements=EQUIPEMENTS_REFERENCE,
+        active_page="arrivages",
+    )
+
+
+@app.route("/archives")
+@login_required
+def archives():
+    return render_template(
+        "archives.html",
+        marques=MARQUES,
+        active_page="archives",
     )
 
 

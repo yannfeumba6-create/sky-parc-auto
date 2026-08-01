@@ -10,13 +10,13 @@
 </div>
 
 <div class="info-box" style="margin-bottom:16px;">
-  Stock des équipements utilisés pour préparer/équiper les véhicules (extincteurs, tapis, chasubles, cric, caisse à outils…). Distinct de la checklist par véhicule dans Stock véhicule.
+  Stock des équipements utilisés pour préparer/équiper les véhicules (extincteurs, tapis, chasubles, cric, caisse à outils…). Un même équipement peut être compté en cartons ET en unités isolées à la fois (ex : 1 carton + 3 unités). Distinct de la checklist par véhicule dans Stock véhicule — quand un équipement coché sur un véhicule change, ce stock se met à jour automatiquement.
 </div>
 
 <div class="table-wrap card" style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Équipement</th><th>Conditionnement</th><th>Cartons complets</th><th>Pièces isolées</th><th>Total pièces</th><th>Actions</th></tr>
+      <tr><th>Équipement</th><th>Conditionnement</th><th>Cartons complets</th><th>Unités isolées</th><th>Total pièces</th><th>Actions</th></tr>
     </thead>
     <tbody id="equip-body"><tr><td colspan="6" class="empty-state">Chargement…</td></tr></tbody>
   </table>
@@ -27,13 +27,61 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title">NOUVEL ÉQUIPEMENT</div><button class="modal-close" onclick="closeModal('modal-equip')">✕</button></div>
     <div class="modal-body">
-      <div class="form-group"><label>Nom de l'équipement</label><input type="text" id="ne-nom" placeholder="Ex : Extincteur, Triangle, Gilet…"></div>
-      <div class="form-group"><label>Pièces par carton (1 si vendu à l'unité)</label><input type="number" id="ne-parcarton" min="1" value="1"></div>
-      <div class="form-group"><label>Stock initial (en pièces)</label><input type="number" id="ne-stock" min="0" value="0"></div>
+      <div class="form-group">
+        <label>Nom de l'équipement</label>
+        <select id="ne-nom-select" onchange="onNomEquipChange()">
+          {% for e in equipements_reference %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+          <option value="__autre__">Autre (préciser)…</option>
+        </select>
+      </div>
+      <div class="form-group" id="ne-nom-libre-groupe" style="display:none;">
+        <label>Précise le nom</label>
+        <input type="text" id="ne-nom-libre" placeholder="Ex : Casque, Balai…">
+      </div>
+      <div class="form-group">
+        <label>Type de conditionnement</label>
+        <select id="ne-conditionnement" onchange="onConditionnementChange()">
+          <option value="carton">Vendu en carton</option>
+          <option value="unite">Vendu à l'unité uniquement</option>
+        </select>
+      </div>
+      <div class="form-group" id="ne-parcarton-groupe">
+        <label>Pièces par carton</label>
+        <input type="number" id="ne-parcarton" min="1" value="10">
+      </div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="form-group" id="ne-cartons-groupe">
+          <label>Stock initial — cartons</label>
+          <input type="number" id="ne-cartons" min="0" value="0">
+        </div>
+        <div class="form-group">
+          <label>Stock initial — unités isolées</label>
+          <input type="number" id="ne-unites" min="0" value="0">
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-equip')">Annuler</button>
       <button class="btn btn-red" onclick="creerEquipement()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — Ajouter / retirer du stock -->
+<div class="modal-bg" id="modal-stock-equip">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-stock-equip-titre">STOCK</div><button class="modal-close" onclick="closeModal('modal-stock-equip')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="se-id">
+      <input type="hidden" id="se-sens">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="form-group"><label>Cartons</label><input type="number" id="se-cartons" min="0" value="0"></div>
+        <div class="form-group"><label>Unités isolées</label><input type="number" id="se-unites" min="0" value="0"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-stock-equip')">Annuler</button>
+      <button class="btn btn-red" onclick="validerMouvementStock()">Valider</button>
     </div>
   </div>
 </div>

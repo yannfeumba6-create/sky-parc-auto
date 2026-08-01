@@ -1,6 +1,6 @@
 import {
-  db, vehiculesRef, historiqueRef,
-  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp,
+  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp,
 } from "./firebase-config.js";
 
 export const STATUT_LABEL = { stock: "En stock", reserve: "Réservé", vendu: "Vendu", endommage: "Endommagé" };
@@ -21,6 +21,15 @@ export function chassis6(chassis) {
   return c.length > 6 ? c.slice(-6) : c;
 }
 
+// Type de véhicule déduit automatiquement de la marque, quand c'est fiable.
+// Howo Sinotruk regroupe camions ET camionnettes : impossible à déduire,
+// l'utilisateur doit choisir lui-même dans ce cas (retourne null).
+export function typeAutomatique(marque) {
+  if (marque === "Jetour" || marque === "Soueast") return "SUV";
+  if (marque === "JMC") return "Pick-up";
+  return null;
+}
+
 // Écoute en temps réel (affiche d'abord le cache local instantanément, puis
 // se met à jour dès que le serveur répond — beaucoup plus rapide à l'écran
 // qu'un chargement à chaque visite de page).
@@ -28,13 +37,6 @@ export function ecouterVehicules(callback) {
   const q = query(vehiculesRef, orderBy("dateEntree", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
-}
-
-export function ecouterHistorique(callback) {
-  const q = query(historiqueRef, orderBy("horodatage", "desc"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => d.data()));
   });
 }
 
@@ -49,23 +51,137 @@ export async function getVehicule(id) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+export async function chassisExisteDeja(chassis, excludeId) {
+  if (!chassis) return false;
+  const q = query(vehiculesRef, where("chassis", "==", chassis.trim()));
+  const snap = await getDocs(q);
+  return snap.docs.some((d) => d.id !== excludeId);
+}
+
 export async function creerVehicule(donnees) {
   donnees.creeLe = serverTimestamp();
+  donnees.creePar = window.UTILISATEUR || "";
+  donnees.equipementsAppliques = donnees.equipements || {};
   const ref = await addDoc(vehiculesRef, donnees);
   await enregistrerHistorique("Entrée en stock", { id: ref.id, ...donnees });
+  await ajusterStockEquipements({}, donnees.equipements);
+  await retirerArrivageParChassis(donnees.chassis);
   return ref.id;
 }
 
-export async function majVehicule(id, donnees) {
-  donnees.misAJour = serverTimestamp();
-  await updateDoc(doc(db, "vehicules", id), donnees);
-  await enregistrerHistorique("Mise à jour", { id, ...donnees });
+// Si un véhicule portant ce châssis existe encore dans la pré-liste
+// "Prochain arrivage", le retire automatiquement — que le véhicule ait été
+// saisi directement dans Stock, importé en masse, ou fait entrer depuis
+// la pré-liste elle-même.
+export async function retirerArrivageParChassis(chassis) {
+  if (!chassis) return;
+  const q = query(arrivagesRef, where("chassis", "==", chassis.trim()));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    await deleteDoc(doc(db, "prochains_arrivages", d.id));
+  }
 }
 
+// Ajuste le stock d'équipements (collection equipements_stock) selon la
+// différence entre l'ancien et le nouvel état de la checklist équipements
+// d'un véhicule — fonctionne aussi bien à la création (ancien = {}) qu'à
+// la modification (un équipement décoché rend son stock, un nouveau coché
+// ou une quantité augmentée le décompte). Prévient si le stock devient
+// insuffisant (quantité demandée supérieure à ce qui est disponible).
+export async function ajusterStockEquipements(ancien, nouveau) {
+  const noms = new Set([...Object.keys(ancien || {}), ...Object.keys(nouveau || {})]);
+  if (noms.size === 0) return;
+  const snap = await getDocs(equipementsRef);
+  const stockDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const insuffisants = [];
+  for (const nom of noms) {
+    const avant = (ancien && ancien[nom] && ancien[nom].present) ? (ancien[nom].quantite || 0) : 0;
+    const apres = (nouveau && nouveau[nom] && nouveau[nom].present) ? (nouveau[nom].quantite || 0) : 0;
+    const delta = apres - avant; // positif = consomme plus de stock, négatif = en rend
+    if (delta === 0) continue;
+    const match = stockDocs.find((s) => (s.nom || "").toLowerCase() === nom.toLowerCase());
+    if (match) {
+      const brut = (match.stockPieces || 0) - delta;
+      if (delta > 0 && brut < 0) insuffisants.push(nom);
+      const nouveauStock = Math.max(0, brut);
+      await updateDoc(doc(db, "equipements_stock", match.id), { stockPieces: nouveauStock });
+    } else if (delta > 0) {
+      insuffisants.push(nom);
+    }
+  }
+  if (insuffisants.length > 0 && typeof toast === "function") {
+    toast(`Stock insuffisant pour : ${insuffisants.join(", ")}`, "terr");
+  }
+}
+
+export async function majVehicule(id, donnees) {
+  const existant = await getDoc(doc(db, "vehicules", id));
+  const donneesActuelles = existant.exists() ? existant.data() : {};
+  const ancienEquip = donneesActuelles.equipementsAppliques || {};
+  const ancienStatut = donneesActuelles.statut;
+
+  donnees.misAJour = serverTimestamp();
+  donnees.misAJourPar = window.UTILISATEUR || "";
+  if (donnees.equipements) {
+    await ajusterStockEquipements(ancienEquip, donnees.equipements);
+    donnees.equipementsAppliques = donnees.equipements;
+  }
+  await updateDoc(doc(db, "vehicules", id), donnees);
+
+  // Transaction importante = le statut a réellement changé (vente,
+  // réservation, mise en dommage, remise en stock). Une simple
+  // correction de champ sans changement de statut n'est pas
+  // journalisée, pour ne garder que l'essentiel dans l'historique.
+  if (donnees.statut && donnees.statut !== ancienStatut) {
+    const libelle = LIBELLE_PAR_STATUT[donnees.statut] || "Mise à jour";
+    await enregistrerHistorique(libelle, { id, ...donneesActuelles, ...donnees });
+  }
+}
+
+// Sortie définitive d'un véhicule du parc : on ne supprime jamais
+// l'information, on l'archive dans vehicules_archives (avec toutes ses
+// infos + qui l'a sorti et quand) avant de le retirer du stock actif.
 export async function supprimerVehicule(vehicule) {
-  await deleteDoc(doc(db, "vehicules", vehicule.id));
+  await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
+  const { id, ...donnees } = vehicule;
+  await addDoc(archivesRef, {
+    ...donnees,
+    sortiLe: serverTimestamp(),
+    sortiPar: window.UTILISATEUR || "",
+  });
+  await deleteDoc(doc(db, "vehicules", id));
   await enregistrerHistorique("Sortie du parc", vehicule);
 }
+
+export function ecouterArchives(callback) {
+  const q = query(archivesRef, orderBy("sortiLe", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+// Remet un véhicule archivé de nouveau dans le stock actif.
+export async function restaurerArchive(archive) {
+  const { id, sortiLe, sortiPar, ...donnees } = archive;
+  await creerVehicule(donnees);
+  await deleteDoc(doc(db, "vehicules_archives", id));
+}
+
+// ---------------------------------------------------------------
+// Historique — partagé entre tous les utilisateurs via Firestore.
+// Seules les transactions importantes sont journalisées (entrée en
+// stock, vente, réservation, mise en dommage, remise en stock,
+// sortie du parc) ; une simple correction de champ (prix, couleur,
+// immatriculation…) sans changement de statut n'est pas obligatoire
+// dans l'historique et n'est donc pas enregistrée.
+// ---------------------------------------------------------------
+
+const LIBELLE_PAR_STATUT = {
+  vendu: "Vente",
+  reserve: "Réservation",
+  endommage: "Mise en dommage",
+  stock: "Remise en stock",
+};
 
 export async function enregistrerHistorique(action, vehicule) {
   await addDoc(historiqueRef, {
@@ -77,7 +193,15 @@ export async function enregistrerHistorique(action, vehicule) {
     statut: vehicule.statut || "",
     prix: vehicule.prix || null,
     client: vehicule.client ? vehicule.client.nom || "" : "",
+    utilisateur: window.UTILISATEUR || "",
     horodatage: serverTimestamp(),
+  });
+}
+
+export function ecouterHistorique(callback) {
+  const q = query(historiqueRef, orderBy("horodatage", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => d.data()));
   });
 }
 
@@ -85,4 +209,53 @@ export async function chargerHistorique() {
   const q = query(historiqueRef, orderBy("horodatage", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data());
+}
+
+// ---------------------------------------------------------------
+// Prochain arrivage — pré-liste des véhicules pas encore en stock
+// ---------------------------------------------------------------
+
+export function ecouterArrivages(callback) {
+  const q = query(arrivagesRef, orderBy("dateArriveePrevue", "asc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export async function getArrivage(id) {
+  const snap = await getDoc(doc(db, "prochains_arrivages", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+export async function creerArrivage(donnees) {
+  donnees.creeLe = serverTimestamp();
+  donnees.creePar = window.UTILISATEUR || "";
+  await addDoc(arrivagesRef, donnees);
+}
+
+export async function majArrivage(id, donnees) {
+  donnees.misAJour = serverTimestamp();
+  await updateDoc(doc(db, "prochains_arrivages", id), donnees);
+}
+
+export async function supprimerArrivage(id) {
+  await deleteDoc(doc(db, "prochains_arrivages", id));
+}
+
+export async function arrivageChassisExisteDeja(chassis, excludeId) {
+  if (!chassis) return false;
+  const q = query(arrivagesRef, where("chassis", "==", chassis.trim()));
+  const snap = await getDocs(q);
+  return snap.docs.some((d) => d.id !== excludeId);
+}
+
+// Fait entrer un véhicule du prochain arrivage directement dans le stock :
+// crée le véhicule (avec la vraie date d'entrée donnée par l'utilisateur)
+// puis retire l'entrée de la pré-liste.
+export async function entrerArrivageEnStock(arrivage, dateEntreeReelle) {
+  const { id, dateArriveePrevue, ...donnees } = arrivage;
+  donnees.dateEntree = dateEntreeReelle;
+  donnees.statut = "stock";
+  await creerVehicule(donnees);
+  await supprimerArrivage(id);
 }

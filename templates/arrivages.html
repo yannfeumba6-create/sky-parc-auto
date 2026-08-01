@@ -1,18 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Stock véhicule{% endblock %}
-{% block body_attrs %}data-page="stock"{% endblock %}
-{% block topbar_title %}Stock <span style="color:var(--red)">véhicule</span>{% endblock %}
+{% block title %}Prochain arrivage{% endblock %}
+{% block body_attrs %}data-page="arrivages"{% endblock %}
+{% block topbar_title %}Prochain <span style="color:var(--red)">arrivage</span>{% endblock %}
 {% block content %}
 
+<div class="info-box" style="margin-bottom:16px;">
+  Pré-liste des véhicules sur le point d'être livrés à l'entreprise (pas encore dans le Stock véhicule). Dès qu'un véhicule arrive vraiment, clique "Entrer en stock" pour le faire basculer avec sa vraie date d'entrée.
+</div>
+
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-  <button class="btn btn-red" onclick="openNouveauVehicule()">+ Nouveau véhicule</button>
+  <button class="btn btn-red" onclick="openNouvelArrivage()">+ Nouvel arrivage</button>
   <button class="btn btn-ghost" onclick="openModal('modal-import')">↑ Importer (CSV/PDF)</button>
   <button class="btn btn-ghost" onclick="exporterCSV()">↓ CSV (filtré)</button>
   <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
-  <button class="btn btn-ghost" onclick="exporterTouteLaBase()">↓ Exporter toute la base</button>
 </div>
 
-<!-- Indicateurs par emplacement -->
+<!-- Indicateurs par emplacement prévu -->
 <div class="kpi-row" id="site-indicators">
   <div class="site-card site-broli"><div class="kpi-val" id="site-broli">—</div><div class="kpi-lbl">Parc Broli</div></div>
   <div class="site-card site-douala"><div class="kpi-val" id="site-douala">—</div><div class="kpi-lbl">Showroom Douala</div></div>
@@ -38,11 +41,11 @@
         <select id="f-modele"><option value="">Tous</option></select>
       </div>
       <div class="form-group" style="margin-bottom:0;">
-        <label>Emplacement</label>
+        <label>Emplacement prévu</label>
         <select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
       </div>
       <div class="form-group" style="margin-bottom:0;">
-        <label>Date d'entrée</label>
+        <label>Date d'arrivée prévue</label>
         <input type="date" id="f-date">
       </div>
       <div class="form-group" style="margin-bottom:0;">
@@ -59,26 +62,39 @@
   </div>
 </div>
 
+<!-- Action groupée -->
+<div class="card" id="barre-selection" style="display:none;margin-bottom:16px;">
+  <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span><b id="nb-selection">0</b> véhicule(s) sélectionné(s)</span>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;">Date d'entrée réelle
+      <input type="date" id="date-entree-groupee">
+    </label>
+    <button class="btn btn-red btn-sm" onclick="entrerSelectionEnStock()">Entrer la sélection en stock</button>
+    <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
+  </div>
+</div>
+
 <!-- Tableau -->
 <div class="table-wrap card" style="overflow-x:auto;">
-  <table id="tableau-stock">
+  <table>
     <thead>
       <tr>
+        <th><input type="checkbox" id="select-all"></th>
         <th>Châssis (6 derniers)</th><th>Marque</th><th>Modèle</th><th>Type</th>
-        <th>Emplacement</th><th>Couleurs</th><th>Année</th><th>Statut</th>
-        <th>Prix</th><th>Entrée</th><th>Actions</th>
+        <th>Emplacement prévu</th><th>Couleurs</th><th>Année</th>
+        <th>Prix prévu</th><th>Arrivée prévue</th><th>Actions</th>
       </tr>
     </thead>
-    <tbody id="stock-body"><tr><td colspan="11" class="empty-state">Chargement…</td></tr></tbody>
+    <tbody id="arrivage-body"><tr><td colspan="11" class="empty-state">Chargement…</td></tr></tbody>
   </table>
 </div>
 
-<!-- MODAL — Ajout / édition véhicule -->
-<div class="modal-bg" id="modal-vehicule">
+<!-- MODAL — Ajout / édition arrivage -->
+<div class="modal-bg" id="modal-arrivage">
   <div class="modal">
-    <div class="modal-header"><div class="modal-title" id="modal-vehicule-title">NOUVEAU VÉHICULE</div><button class="modal-close" onclick="closeModal('modal-vehicule')">✕</button></div>
+    <div class="modal-header"><div class="modal-title" id="modal-arrivage-title">NOUVEL ARRIVAGE</div><button class="modal-close" onclick="closeModal('modal-arrivage')">✕</button></div>
     <div class="modal-body">
-      <form id="form-vehicule">
+      <form id="form-arrivage">
         <input type="hidden" id="v-id">
         <div class="section-lbl">Identification</div>
         <div class="form-grid">
@@ -94,43 +110,16 @@
         </div>
 
         <div class="divider"></div>
-        <div class="section-lbl">Commercial</div>
+        <div class="section-lbl">Livraison prévue</div>
         <div class="form-grid">
-          <div class="form-group"><label>Emplacement</label><select id="v-emplacement">{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
-          <div class="form-group"><label>Statut</label>
-            <select id="v-statut" onchange="onStatutChange()">
-              <option value="stock">En stock</option>
-              <option value="reserve">Réservé</option>
-              <option value="vendu">Vendu</option>
-              <option value="endommage">Endommagé</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="v-prix" min="0"></div>
+          <div class="form-group"><label>Emplacement prévu</label><select id="v-emplacement">{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Prix prévu (FCFA)</label><input type="number" id="v-prix" min="0"></div>
           <div class="form-group"><label>Kilométrage</label><input type="number" id="v-kilometrage" min="0"></div>
-          <div class="form-group"><label>Date d'entrée</label><input type="date" id="v-dateEntree"></div>
-          <div class="form-group" id="g-dateSortie" style="display:none;"><label>Date de sortie</label><input type="date" id="v-dateSortie"></div>
-        </div>
-
-        <div id="section-client" style="display:none;">
-          <div class="divider"></div>
-          <div class="section-lbl">Informations client</div>
-          <div class="form-grid">
-            <div class="form-group"><label>Nom du client</label><input type="text" id="v-clientNom"></div>
-            <div class="form-group"><label>Contact</label><input type="text" id="v-clientContact"></div>
-            <div class="form-group"><label>Date d'achat</label><input type="date" id="v-dateAchat"></div>
-            <div class="form-group"><label>Mode de paiement</label><input type="text" id="v-modePaiement"></div>
-            <div class="form-group"><label>Vendeur / agent</label><input type="text" id="v-vendeur"></div>
-          </div>
-        </div>
-
-        <div id="section-dommages" style="display:none;">
-          <div class="divider"></div>
-          <div class="section-lbl">Pièces / parties endommagées</div>
-          <div class="form-group"><textarea id="v-pieces-endommagees" rows="3" placeholder="Ex : pare-choc avant, rétroviseur gauche, pare-brise…"></textarea></div>
+          <div class="form-group"><label>Date d'arrivée prévue</label><input type="date" id="v-dateArriveePrevue" required></div>
         </div>
 
         <div class="divider"></div>
-        <div class="section-lbl">Équipements</div>
+        <div class="section-lbl">Équipements prévus</div>
         <div class="equip-grid" id="equip-grid">
           {% for e in equipements %}
           <label class="equip-item" style="display:flex;align-items:center;gap:8px;">
@@ -142,8 +131,8 @@
       </form>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-vehicule')">Annuler</button>
-      <button class="btn btn-red" onclick="enregistrerVehicule()">Enregistrer</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-arrivage')">Annuler</button>
+      <button class="btn btn-red" onclick="enregistrerArrivage()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -151,9 +140,9 @@
 <!-- MODAL — Import -->
 <div class="modal-bg" id="modal-import">
   <div class="modal">
-    <div class="modal-header"><div class="modal-title">IMPORTER DES VÉHICULES</div><button class="modal-close" onclick="closeModal('modal-import')">✕</button></div>
+    <div class="modal-header"><div class="modal-title">IMPORTER DES ARRIVAGES</div><button class="modal-close" onclick="closeModal('modal-import')">✕</button></div>
     <div class="modal-body">
-      <div class="info-box">Colonnes attendues (CSV) : <strong>Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure, Date d'entrée</strong> (obligatoires), puis en option Type, Emplacement, Année, Prix. Seules les données utiles à l'enregistrement du véhicule sont reprises ; le reste est ignoré. Si le type n'est pas fourni, il est déduit automatiquement pour Jetour/Soueast (SUV) et JMC (Pick-up) — à préciser toi-même pour Howo Sinotruk. Formats acceptés : CSV ou PDF (tableau simple).</div>
+      <div class="info-box">Colonnes attendues (CSV) : <strong>Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure, Date d'arrivée prévue</strong> (obligatoires), puis en option Type, Emplacement, Année, Prix. Formats acceptés : CSV ou PDF (tableau simple).</div>
       <div class="form-group" style="margin-top:12px;"><label>Fichier</label><input type="file" id="import-file" accept=".csv,.pdf"></div>
       <div id="import-status" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
     </div>
@@ -163,21 +152,7 @@
 
 <div id="pdf-content" style="display:none"></div>
 
-<!-- MODAL — Historique d'un véhicule -->
-<div class="modal-bg" id="modal-historique-vehicule">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title" id="historique-vehicule-titre">HISTORIQUE</div><button class="modal-close" onclick="closeModal('modal-historique-vehicule')">✕</button></div>
-    <div class="modal-body">
-      <table>
-        <thead><tr><th>Date</th><th>Action</th><th>Statut</th><th>Effectué par</th></tr></thead>
-        <tbody id="historique-vehicule-body"></tbody>
-      </table>
-    </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-historique-vehicule')">Fermer</button></div>
-  </div>
-</div>
-
 {% endblock %}
 {% block scripts %}
-<script type="module" src="/static/js/stock.js"></script>
+<script type="module" src="/static/js/arrivages.js"></script>
 {% endblock %}

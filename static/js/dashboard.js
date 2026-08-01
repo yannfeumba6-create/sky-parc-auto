@@ -70,6 +70,8 @@ function rendreKpis() {
   document.getElementById("kpi-reserve").textContent = _vehicules.filter((v) => v.statut === "reserve").length;
   document.getElementById("kpi-vendu").textContent = _vehicules.filter((v) => v.statut === "vendu").length;
   document.getElementById("kpi-endommage").textContent = _vehicules.filter((v) => v.statut === "endommage").length;
+  const valeur = _vehicules.filter((v) => v.statut === "stock").reduce((s, v) => s + (Number(v.prix) || 0), 0);
+  document.getElementById("kpi-valeur-stock").textContent = valeur.toLocaleString("fr-FR") + " F";
 }
 
 // ---------------------------------------------------------------
@@ -212,8 +214,65 @@ function rendreTout() {
   rendreDommages();
   rendreTop10();
   rendreVentes();
+  rendreTypes();
+  rendreDelai();
 }
 window.updateCharts = rendreTout;
+
+// ---------------------------------------------------------------
+// Répartition du parc par type
+// ---------------------------------------------------------------
+
+function rendreTypes() {
+  const types = window.TYPES_VEHICULE || [];
+  const data = types.map((t) => _vehicules.filter((v) => v.type === t).length);
+  const tc = couleurTexte();
+  const couleurs = ["#c0392b", "#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085"];
+  const ctx = document.getElementById("chart-types").getContext("2d");
+  if (_charts.types) _charts.types.destroy();
+  _charts.types = new Chart(ctx, {
+    type: "pie",
+    data: { labels: types, datasets: [{ data, backgroundColor: couleurs }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { color: tc, font: { size: 9 } } } },
+    },
+  });
+}
+
+// ---------------------------------------------------------------
+// Délai moyen de vente par marque
+// ---------------------------------------------------------------
+
+function rendreDelai() {
+  const marques = window.MARQUES || [];
+  const moyennes = marques.map((m) => {
+    const vendus = _vehicules.filter((v) => v.marque === m && v.statut === "vendu" && v.dateEntree && v.client?.dateAchat);
+    if (vendus.length === 0) return 0;
+    const total = vendus.reduce((s, v) => {
+      const entree = toDate(v.dateEntree);
+      const achat = toDate(v.client.dateAchat);
+      if (!entree || !achat) return s;
+      return s + Math.max(0, Math.round((achat - entree) / (1000 * 60 * 60 * 24)));
+    }, 0);
+    return Math.round(total / vendus.length);
+  });
+  const tc = couleurTexte();
+  const ctx = document.getElementById("chart-delai").getContext("2d");
+  if (_charts.delai) _charts.delai.destroy();
+  _charts.delai = new Chart(ctx, {
+    type: "bar",
+    data: { labels: marques, datasets: [{ label: "Jours", data: moyennes, backgroundColor: "rgba(41,128,185,.75)", borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 9 } } },
+        y: { ticks: { color: tc, font: { size: 9 }, precision: 0 }, beginAtZero: true },
+      },
+    },
+  });
+}
 
 // ---------------------------------------------------------------
 // Téléchargement des graphiques en image

@@ -38,53 +38,39 @@ function rendre() {
   }).join("");
 }
 
-document.addEventListener("click", async (e) => {
-  const btn = e.target.closest("[data-action]");
-  if (!btn) return;
-  const { action, id } = btn.dataset;
-  const equip = _equipements.find((x) => x.id === id);
-  if (!equip) return;
+// ---------------------------------------------------------------
+// Formulaire Nouvel équipement
+// ---------------------------------------------------------------
 
-  if (action === "ajouter") {
-    const val = prompt(`Combien de pièces de "${equip.nom}" ajouter au stock ?\n(1 carton = ${equip.piecesParCarton || 1} pièce(s) — entre directement en pièces)`, equip.piecesParCarton || 1);
-    if (val === null) return;
-    const n = Number(val);
-    if (!n || n <= 0) { toast("Quantité invalide", "terr"); return; }
-    await updateDoc(doc(db, "equipements_stock", id), { stockPieces: (equip.stockPieces || 0) + n });
-    toast("Stock mis à jour");
-    charger();
-  }
+window.onNomEquipChange = function () {
+  const val = document.getElementById("ne-nom-select").value;
+  document.getElementById("ne-nom-libre-groupe").style.display = val === "__autre__" ? "block" : "none";
+};
 
-  if (action === "retirer") {
-    const val = prompt(`Combien de pièces de "${equip.nom}" retirer/utiliser ?`, 1);
-    if (val === null) return;
-    const n = Number(val);
-    if (!n || n <= 0) { toast("Quantité invalide", "terr"); return; }
-    const nouveauStock = Math.max(0, (equip.stockPieces || 0) - n);
-    await updateDoc(doc(db, "equipements_stock", id), { stockPieces: nouveauStock });
-    toast("Stock mis à jour");
-    charger();
-  }
-
-  if (action === "supprimer") {
-    if (!confirm(`Supprimer "${equip.nom}" du stock d'équipements ?`)) return;
-    await deleteDoc(doc(db, "equipements_stock", id));
-    toast("Équipement supprimé");
-    charger();
-  }
-});
+window.onConditionnementChange = function () {
+  const carton = document.getElementById("ne-conditionnement").value === "carton";
+  document.getElementById("ne-parcarton-groupe").style.display = carton ? "block" : "none";
+  document.getElementById("ne-cartons-groupe").style.display = carton ? "block" : "none";
+  if (!carton) document.getElementById("ne-cartons").value = 0;
+};
 
 window.creerEquipement = async function () {
-  const nom = document.getElementById("ne-nom").value.trim();
-  const parCarton = Number(document.getElementById("ne-parcarton").value) || 1;
-  const stock = Number(document.getElementById("ne-stock").value) || 0;
+  const selectVal = document.getElementById("ne-nom-select").value;
+  const nom = selectVal === "__autre__" ? document.getElementById("ne-nom-libre").value.trim() : selectVal;
   if (!nom) { toast("Le nom est requis", "terr"); return; }
-  await addDoc(equipementsRef, { nom, piecesParCarton: parCarton, stockPieces: stock });
+
+  const carton = document.getElementById("ne-conditionnement").value === "carton";
+  const parCarton = carton ? (Number(document.getElementById("ne-parcarton").value) || 1) : 1;
+  const cartons = carton ? (Number(document.getElementById("ne-cartons").value) || 0) : 0;
+  const unites = Number(document.getElementById("ne-unites").value) || 0;
+  const stockPieces = cartons * parCarton + unites;
+
+  await addDoc(equipementsRef, { nom, piecesParCarton: parCarton, stockPieces });
   toast("Équipement créé");
   closeModal("modal-equip");
-  document.getElementById("ne-nom").value = "";
-  document.getElementById("ne-parcarton").value = 1;
-  document.getElementById("ne-stock").value = 0;
+  document.getElementById("ne-nom-libre").value = "";
+  document.getElementById("ne-cartons").value = 0;
+  document.getElementById("ne-unites").value = 0;
   charger();
 };
 
@@ -95,6 +81,56 @@ window.chargerBase = async function () {
     if (!existe) await addDoc(equipementsRef, { nom: e.nom, piecesParCarton: e.piecesParCarton, stockPieces: 0 });
   }
   toast("Équipements de base ajoutés");
+  charger();
+};
+
+// ---------------------------------------------------------------
+// Ajouter / retirer du stock — en cartons + unités isolées
+// ---------------------------------------------------------------
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const { action, id } = btn.dataset;
+  const equip = _equipements.find((x) => x.id === id);
+  if (!equip) return;
+
+  if (action === "ajouter" || action === "retirer") {
+    document.getElementById("se-id").value = id;
+    document.getElementById("se-sens").value = action;
+    document.getElementById("se-cartons").value = 0;
+    document.getElementById("se-unites").value = 0;
+    document.getElementById("modal-stock-equip-titre").textContent =
+      (action === "ajouter" ? "AJOUTER — " : "UTILISER — ") + equip.nom;
+    openModal("modal-stock-equip");
+  }
+
+  if (action === "supprimer") {
+    if (!confirm(`Supprimer "${equip.nom}" du stock d'équipements ?`)) return;
+    deleteDoc(doc(db, "equipements_stock", id)).then(() => { toast("Équipement supprimé"); charger(); });
+  }
+});
+
+window.validerMouvementStock = async function () {
+  const id = document.getElementById("se-id").value;
+  const sens = document.getElementById("se-sens").value;
+  const equip = _equipements.find((x) => x.id === id);
+  if (!equip) return;
+
+  const ppc = equip.piecesParCarton || 1;
+  const cartons = Number(document.getElementById("se-cartons").value) || 0;
+  const unites = Number(document.getElementById("se-unites").value) || 0;
+  const pieces = cartons * ppc + unites;
+
+  if (pieces <= 0) { toast("Indique une quantité", "terr"); return; }
+
+  const nouveauStock = sens === "ajouter"
+    ? (equip.stockPieces || 0) + pieces
+    : Math.max(0, (equip.stockPieces || 0) - pieces);
+
+  await updateDoc(doc(db, "equipements_stock", id), { stockPieces: nouveauStock });
+  toast("Stock mis à jour");
+  closeModal("modal-stock-equip");
   charger();
 };
 

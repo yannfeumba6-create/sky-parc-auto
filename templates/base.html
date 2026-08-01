@@ -30,6 +30,9 @@
     <a href="/stock" class="nav-a {{ 'active' if active_page == 'stock' }}">
       <span class="ni">🚗</span><span>Stock véhicule</span>
     </a>
+    <a href="/arrivages" class="nav-a {{ 'active' if active_page == 'arrivages' }}">
+      <span class="ni">🚚</span><span>Prochain arrivage</span>
+    </a>
     <a href="/vendus" class="nav-a {{ 'active' if active_page == 'vendus' }}">
       <span class="ni">💰</span><span>Véhicules vendus</span>
     </a>
@@ -39,12 +42,18 @@
     <a href="/equipements" class="nav-a {{ 'active' if active_page == 'equipements' }}">
       <span class="ni">🧰</span><span>Équipements</span>
     </a>
+    <a href="/historique" class="nav-a {{ 'active' if active_page == 'historique' }}">
+      <span class="ni">🕒</span><span>Historique</span>
+    </a>
+    <a href="/archives" class="nav-a {{ 'active' if active_page == 'archives' }}">
+      <span class="ni">📦</span><span>Véhicules archivés</span>
+    </a>
   </nav>
 
   <div class="sb-user">
-    <div class="sb-av">PB</div>
+    <div class="sb-av">{{ (session.nom or "?")[:2].upper() }}</div>
     <div>
-      <div class="sb-un">Parc Broli</div>
+      <div class="sb-un">{{ session.nom or "Utilisateur" }}</div>
       <div class="sb-ur">Gestion véhicules</div>
     </div>
     <a href="/logout" class="sb-logout" title="Déconnexion">⏻</a>
@@ -58,7 +67,8 @@
       <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
       <div class="tb-title">{% block topbar_title %}{% endblock %}</div>
     </div>
-    <div class="tb-right">
+    <div class="tb-right" style="display:flex;gap:10px;align-items:center;">
+      <input type="text" id="recherche-globale" placeholder="🔎 Rechercher un véhicule (châssis, modèle…)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-size:12.5px;min-width:220px;">
       <button class="theme-btn" onclick="toggleTheme()" id="theme-icon">🌙</button>
     </div>
   </div>
@@ -144,6 +154,15 @@ window.SKY_PDF = {
     w.document.close();return w;
   }
 };
+
+window.UTILISATEUR = {{ (session.nom or "") | tojson }};
+
+document.getElementById('recherche-globale').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const q = e.target.value.trim();
+    if (q) window.location.href = '/stock?q=' + encodeURIComponent(q);
+  }
+});
 
 window.addEventListener('DOMContentLoaded', applyTheme);
 </script>

@@ -18,6 +18,7 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  where,
   orderBy,
   onSnapshot,
   serverTimestamp,
@@ -41,7 +42,9 @@ export const db = initializeFirestore(app, {
 export const vehiculesRef = collection(db, "vehicules");
 export const historiqueRef = collection(db, "historique");
 export const equipementsRef = collection(db, "equipements_stock");
+export const arrivagesRef = collection(db, "prochains_arrivages");
+export const archivesRef = collection(db, "vehicules_archives");
 
 export {
-  doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp,
+  doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp,
 };

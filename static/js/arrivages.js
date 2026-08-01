@@ -1,9 +1,10 @@
 import {
-  ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule,
-  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
+  ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
+  entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
 } from "./data.js";
 
-let _vehicules = [];
+let _arrivages = [];
+const _selection = new Set();
 
 window.onMarqueChange = function () {
   const marque = document.getElementById("v-marque").value;
@@ -52,15 +53,15 @@ function rendreTout() {
 }
 
 function demarrerEcoute() {
-  ecouterVehicules((liste) => {
-    _vehicules = liste;
+  ecouterArrivages((liste) => {
+    _arrivages = liste;
     rendreTout();
   });
 }
 
 function rendreIndicateurs() {
   Object.entries(SITE_KEYS).forEach(([site, id]) => {
-    const n = _vehicules.filter((v) => v.emplacement === site).length;
+    const n = _arrivages.filter((v) => v.emplacement === site).length;
     const el = document.getElementById(id);
     if (el) el.textContent = n;
   });
@@ -75,22 +76,16 @@ function dansPeriode(dateStr, periode) {
   const debutJour = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (periode === "jour") return d >= debutJour;
   if (periode === "semaine") {
-    const jourSemaine = (now.getDay() + 6) % 7; // lundi = 0
+    const jourSemaine = (now.getDay() + 6) % 7;
     const debutSemaine = new Date(debutJour); debutSemaine.setDate(debutJour.getDate() - jourSemaine);
     return d >= debutSemaine;
   }
-  if (periode === "mois") {
-    const debutMois = new Date(now.getFullYear(), now.getMonth(), 1);
-    return d >= debutMois;
-  }
-  if (periode === "trimestre") {
-    const debutTrimestre = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    return d >= debutTrimestre;
-  }
+  if (periode === "mois") return d >= new Date(now.getFullYear(), now.getMonth(), 1);
+  if (periode === "trimestre") return d >= new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
   return true;
 }
 
-function vehiculesFiltres() {
+function arrivagesFiltres() {
   const recherche = document.getElementById("f-recherche").value.trim().toLowerCase();
   const marque = document.getElementById("f-marque").value;
   const modele = document.getElementById("f-modele").value;
@@ -98,12 +93,12 @@ function vehiculesFiltres() {
   const date = document.getElementById("f-date").value;
   const periode = document.getElementById("f-periode").value;
 
-  return _vehicules.filter((v) => {
+  return _arrivages.filter((v) => {
     if (marque && v.marque !== marque) return false;
     if (modele && v.modele !== modele) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
-    if (date && v.dateEntree !== date) return false;
-    if (!dansPeriode(v.dateEntree, periode)) return false;
+    if (date && v.dateArriveePrevue !== date) return false;
+    if (!dansPeriode(v.dateArriveePrevue, periode)) return false;
     if (recherche) {
       const cible = `${v.chassis || ""} ${v.modele || ""} ${v.immatriculation || ""} ${chassis6(v.chassis)}`.toLowerCase();
       if (!cible.includes(recherche)) return false;
@@ -121,20 +116,11 @@ function rafraichirFiltreModeles() {
   if (modeles.includes(valActuelle)) sel.value = valActuelle;
 }
 
-function joursDepuis(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d)) return null;
-  return Math.floor((new Date() - d) / (1000 * 60 * 60 * 24));
-}
-
 function ligneTableau(v) {
-  const badge = STATUT_BADGE[v.statut] || "badge-stock";
-  const label = STATUT_LABEL[v.statut] || v.statut;
-  const jours = joursDepuis(v.dateEntree);
-  const critique = v.statut === "stock" && jours !== null && jours >= 60;
+  const coche = _selection.has(v.id) ? "checked" : "";
   return `
     <tr data-id="${v.id}">
+      <td><input type="checkbox" class="select-ligne" data-id="${v.id}" ${coche}></td>
       <td class="plate">${chassis6(v.chassis)}</td>
       <td>${v.marque || "—"}</td>
       <td>${v.modele || "—"}</td>
@@ -142,28 +128,25 @@ function ligneTableau(v) {
       <td>${v.emplacement || "—"}</td>
       <td style="font-size:12px;">Ext : ${v.couleurExt || "—"}<br>Int : ${v.couleurInt || "—"}</td>
       <td>${v.annee || "—"}</td>
-      <td><span class="tag ${badge}">${label}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
-      <td>${v.dateEntree || "—"}</td>
+      <td>${v.dateArriveePrevue || "—"}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" data-action="modifier" data-id="${v.id}">✎</button>
-        ${v.statut === "stock" ? `<button class="btn btn-ghost btn-sm" data-action="reserver" data-id="${v.id}">Réserver</button>` : ""}
-        ${v.statut !== "vendu" ? `<button class="btn btn-ghost btn-sm" data-action="vendre" data-id="${v.id}">Vendre</button>` : ""}
-        ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
-        <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
-        <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie</button>
+        <button class="btn btn-red btn-sm" data-action="entrer" data-id="${v.id}">Entrer en stock</button>
+        <button class="btn btn-ghost btn-sm" data-action="supprimer" data-id="${v.id}">Supprimer</button>
       </td>
     </tr>`;
 }
 
 function rendreTableau() {
-  const tbody = document.getElementById("stock-body");
-  const liste = vehiculesFiltres();
+  const tbody = document.getElementById("arrivage-body");
+  const liste = arrivagesFiltres();
   if (liste.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><strong>Aucun véhicule</strong>Ajuste les filtres ou ajoute un véhicule.</td></tr>`;
-    return;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><strong>Aucun arrivage prévu</strong>Ajuste les filtres ou ajoute un arrivage.</td></tr>`;
+  } else {
+    tbody.innerHTML = liste.map(ligneTableau).join("");
   }
-  tbody.innerHTML = liste.map(ligneTableau).join("");
+  rendreBarreSelection();
 }
 
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
@@ -173,49 +156,83 @@ function rendreTableau() {
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);
 
 // ---------------------------------------------------------------
-// Modal véhicule — ouverture / pré-remplissage / sauvegarde
+// Sélection multiple — entrer plusieurs véhicules en stock d'un coup
 // ---------------------------------------------------------------
 
-window.onStatutChange = function () {
-  const statut = document.getElementById("v-statut").value;
-  document.getElementById("section-client").style.display = statut === "vendu" ? "block" : "none";
-  document.getElementById("section-dommages").style.display = statut === "endommage" ? "block" : "none";
-  document.getElementById("g-dateSortie").style.display = (statut === "vendu") ? "flex" : "none";
+function rendreBarreSelection() {
+  const barre = document.getElementById("barre-selection");
+  const n = _selection.size;
+  document.getElementById("nb-selection").textContent = n;
+  barre.style.display = n > 0 ? "block" : "none";
+  const selectAll = document.getElementById("select-all");
+  const visibles = arrivagesFiltres().map((v) => v.id);
+  selectAll.checked = visibles.length > 0 && visibles.every((id) => _selection.has(id));
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "select-all") {
+    const visibles = arrivagesFiltres().map((v) => v.id);
+    if (e.target.checked) visibles.forEach((id) => _selection.add(id));
+    else visibles.forEach((id) => _selection.delete(id));
+    rendreTableau();
+    return;
+  }
+  if (e.target.classList.contains("select-ligne")) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) _selection.add(id);
+    else _selection.delete(id);
+    rendreBarreSelection();
+  }
+});
+
+window.viderSelection = function () {
+  _selection.clear();
+  rendreTableau();
 };
 
+window.entrerSelectionEnStock = async function () {
+  const date = document.getElementById("date-entree-groupee").value;
+  if (!date) { toast("Choisis une date d'entrée", "terr"); return; }
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  for (const id of ids) {
+    const v = _arrivages.find((x) => x.id === id);
+    if (v) await entrerArrivageEnStock(v, date);
+  }
+  toast(`${ids.length} véhicule(s) entré(s) en stock`);
+  _selection.clear();
+};
+
+// ---------------------------------------------------------------
+// Modal arrivage — ouverture / pré-remplissage / sauvegarde
+// ---------------------------------------------------------------
+
 function viderFormulaire() {
-  document.getElementById("form-vehicule").reset();
+  document.getElementById("form-arrivage").reset();
   document.getElementById("v-id").value = "";
   document.querySelectorAll("[data-equip]").forEach((cb) => (cb.checked = false));
   onMarqueChange();
-  onStatutChange();
 }
 
-window.openNouveauVehicule = function () {
+window.openNouvelArrivage = function () {
   viderFormulaire();
-  document.getElementById("modal-vehicule-title").textContent = "NOUVEAU VÉHICULE";
-  document.getElementById("v-dateEntree").value = new Date().toISOString().slice(0, 10);
-  openModal("modal-vehicule");
+  document.getElementById("modal-arrivage-title").textContent = "NOUVEL ARRIVAGE";
+  openModal("modal-arrivage");
 };
 
-async function ouvrirEdition(id, statutForce) {
-  const v = await getVehicule(id);
+async function ouvrirEdition(id) {
+  const v = await getArrivage(id);
   if (!v) return;
   viderFormulaire();
-  document.getElementById("modal-vehicule-title").textContent = "MODIFIER LE VÉHICULE";
+  document.getElementById("modal-arrivage-title").textContent = "MODIFIER L'ARRIVAGE";
   document.getElementById("v-id").value = v.id;
   const set = (elId, val) => { const el = document.getElementById(elId); if (el && val !== undefined && val !== null) el.value = val; };
   set("v-chassis", v.chassis); set("v-immatriculation", v.immatriculation);
   set("v-marque", v.marque); onMarqueChange(); set("v-modele", v.modele); set("v-type", v.type);
   set("v-annee", v.annee); set("v-couleurExt", v.couleurExt); set("v-couleurInt", v.couleurInt);
-  set("v-emplacement", v.emplacement); set("v-statut", statutForce || v.statut);
+  set("v-emplacement", v.emplacement);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
-  set("v-dateEntree", v.dateEntree); set("v-dateSortie", v.dateSortie);
-  if (v.client) {
-    set("v-clientNom", v.client.nom); set("v-clientContact", v.client.contact);
-    set("v-dateAchat", v.client.dateAchat); set("v-modePaiement", v.client.modePaiement); set("v-vendeur", v.client.vendeur);
-  }
-  if (v.piecesEndommagees) document.getElementById("v-pieces-endommagees").value = v.piecesEndommagees;
+  set("v-dateArriveePrevue", v.dateArriveePrevue);
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
       const cb = document.querySelector(`[data-equip="${nom}"]`);
@@ -224,8 +241,7 @@ async function ouvrirEdition(id, statutForce) {
       if (qty && info.quantite !== undefined) qty.value = info.quantite;
     });
   }
-  onStatutChange();
-  openModal("modal-vehicule");
+  openModal("modal-arrivage");
 }
 
 function lireEquipements() {
@@ -238,9 +254,8 @@ function lireEquipements() {
   return equipements;
 }
 
-window.enregistrerVehicule = async function () {
+window.enregistrerArrivage = async function () {
   const id = document.getElementById("v-id").value;
-  const statut = document.getElementById("v-statut").value;
 
   const donnees = {
     chassis: document.getElementById("v-chassis").value.trim(),
@@ -252,42 +267,33 @@ window.enregistrerVehicule = async function () {
     couleurExt: document.getElementById("v-couleurExt").value,
     couleurInt: document.getElementById("v-couleurInt").value,
     emplacement: document.getElementById("v-emplacement").value,
-    statut,
     prix: Number(document.getElementById("v-prix").value) || null,
     kilometrage: Number(document.getElementById("v-kilometrage").value) || null,
-    dateEntree: document.getElementById("v-dateEntree").value || null,
-    dateSortie: document.getElementById("v-dateSortie").value || null,
+    dateArriveePrevue: document.getElementById("v-dateArriveePrevue").value || null,
     equipements: lireEquipements(),
   };
 
-  if (!donnees.chassis || !donnees.modele) { toast("Châssis et modèle sont requis", "terr"); return; }
-
-  if (await chassisExisteDeja(donnees.chassis, id)) {
-    toast("Ce châssis existe déjà dans le parc", "terr");
+  if (!donnees.chassis || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateArriveePrevue) {
+    toast("Châssis, modèle, couleurs et date d'arrivée prévue sont requis", "terr");
     return;
   }
-
-  if (statut === "vendu") {
-    donnees.client = {
-      nom: document.getElementById("v-clientNom").value.trim(),
-      contact: document.getElementById("v-clientContact").value.trim(),
-      dateAchat: document.getElementById("v-dateAchat").value || null,
-      modePaiement: document.getElementById("v-modePaiement").value.trim(),
-      vendeur: document.getElementById("v-vendeur").value.trim(),
-    };
+  if (await arrivageChassisExisteDeja(donnees.chassis, id)) {
+    toast("Ce châssis existe déjà dans les arrivages", "terr");
+    return;
   }
-  if (statut === "endommage") {
-    donnees.piecesEndommagees = document.getElementById("v-pieces-endommagees").value.trim();
+  if (await chassisExisteDeja(donnees.chassis)) {
+    toast("Ce châssis est déjà présent dans le Stock véhicule", "terr");
+    return;
   }
 
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
 
-  if (id) await majVehicule(id, donnees);
-  else await creerVehicule(donnees);
+  if (id) await majArrivage(id, donnees);
+  else await creerArrivage(donnees);
 
-  toast("Véhicule enregistré");
-  closeModal("modal-vehicule");
+  toast("Arrivage enregistré");
+  closeModal("modal-arrivage");
 };
 
 // ---------------------------------------------------------------
@@ -300,36 +306,20 @@ document.addEventListener("click", async (e) => {
   const { action, id } = btn.dataset;
 
   if (action === "modifier") return ouvrirEdition(id);
-  if (action === "vendre") return ouvrirEdition(id, "vendu");
-  if (action === "reserver") {
-    await majVehicule(id, { statut: "reserve" });
-    toast("Véhicule réservé");
+
+  if (action === "entrer") {
+    const v = _arrivages.find((x) => x.id === id);
+    if (!v) return;
+    const date = prompt("Date d'entrée réelle dans le stock (AAAA-MM-JJ) :", new Date().toISOString().slice(0, 10));
+    if (date === null) return;
+    await entrerArrivageEnStock(v, date.trim() || new Date().toISOString().slice(0, 10));
+    toast("Véhicule entré dans le Stock véhicule");
   }
-  if (action === "endommager") {
-    const pieces = prompt("Quelles pièces / parties sont endommagées ?");
-    if (pieces === null) return;
-    await majVehicule(id, { statut: "endommage", piecesEndommagees: pieces });
-    toast("Véhicule marqué endommagé");
-  }
-  if (action === "sortir") {
-    if (!confirm("Confirmer la sortie de ce véhicule du parc ? Il sera archivé (consultable dans Véhicules archivés) et retiré du Stock véhicule.")) return;
-    const v = _vehicules.find((x) => x.id === id);
-    await supprimerVehicule(v);
-    toast("Véhicule sorti du parc");
-  }
-  if (action === "historique") {
-    const v = _vehicules.find((x) => x.id === id);
-    const tout = await chargerHistorique();
-    const lignes = tout.filter((h) => h.chassis === v.chassis);
-    const corps = document.getElementById("historique-vehicule-body");
-    corps.innerHTML = lignes.length === 0
-      ? `<tr><td colspan="4" class="empty-state">Aucun historique pour ce véhicule</td></tr>`
-      : lignes.map((h) => {
-          const d = h.horodatage?.toDate ? h.horodatage.toDate() : null;
-          return `<tr><td>${d ? d.toLocaleString("fr-FR") : "—"}</td><td>${h.action}</td><td>${STATUT_LABEL[h.statut] || h.statut || "—"}</td><td><b>${h.utilisateur || "—"}</b></td></tr>`;
-        }).join("");
-    document.getElementById("historique-vehicule-titre").textContent = `Historique — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
-    openModal("modal-historique-vehicule");
+
+  if (action === "supprimer") {
+    if (!confirm("Supprimer cet arrivage de la pré-liste ?")) return;
+    await supprimerArrivage(id);
+    toast("Arrivage supprimé");
   }
 });
 
@@ -338,27 +328,20 @@ document.addEventListener("click", async (e) => {
 // ---------------------------------------------------------------
 
 window.exporterCSV = function () {
-  const liste = vehiculesFiltres();
-  if (liste.length === 0) { toast("Aucun véhicule à exporter", "tinfo"); return; }
-  const headers = ["Châssis", "Marque", "Modèle", "Type", "Emplacement", "Année", "Statut", "Prix", "Date entrée"];
-  const rows = liste.map((v) => [v.chassis, v.marque, v.modele, v.type, v.emplacement, v.annee, STATUT_LABEL[v.statut] || v.statut, v.prix, v.dateEntree]);
-  exportCSV(`stock_parc_broli_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-};
-
-window.exporterTouteLaBase = function () {
-  if (_vehicules.length === 0) { toast("Aucun véhicule dans la base", "tinfo"); return; }
-  const headers = ["Châssis", "Immatriculation", "Marque", "Modèle", "Type", "Emplacement", "Année", "Couleur ext.", "Couleur int.", "Statut", "Prix", "Kilométrage", "Date entrée", "Client", "Contact client", "Date achat"];
-  const rows = _vehicules.map((v) => [v.chassis, v.immatriculation, v.marque, v.modele, v.type, v.emplacement, v.annee, v.couleurExt, v.couleurInt, STATUT_LABEL[v.statut] || v.statut, v.prix, v.kilometrage, v.dateEntree, v.client?.nom, v.client?.contact, v.client?.dateAchat]);
-  exportCSV(`base_complete_parc_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  const liste = arrivagesFiltres();
+  if (liste.length === 0) { toast("Aucun arrivage à exporter", "tinfo"); return; }
+  const headers = ["Châssis", "Marque", "Modèle", "Type", "Emplacement prévu", "Année", "Prix prévu", "Date arrivée prévue"];
+  const rows = liste.map((v) => [v.chassis, v.marque, v.modele, v.type, v.emplacement, v.annee, v.prix, v.dateArriveePrevue]);
+  exportCSV(`prochain_arrivage_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 };
 
 window.exporterPDF = function () {
-  const liste = vehiculesFiltres();
-  const rows = liste.map((v) => `<tr><td>${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td><td>${v.emplacement || "—"}</td><td>${v.annee || "—"}</td><td>${STATUT_LABEL[v.statut] || v.statut}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
+  const liste = arrivagesFiltres();
+  const rows = liste.map((v) => `<tr><td>${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td><td>${v.emplacement || "—"}</td><td>${v.annee || "—"}</td><td>${v.dateArriveePrevue || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
   document.getElementById("pdf-content").innerHTML = `
-    <div class="kpi-row"><div class="kpi-box"><div class="kpi-val">${liste.length}</div><div class="kpi-lbl">Véhicules</div></div></div>
-    <table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Année</th><th>Statut</th><th>Prix</th></tr></thead><tbody>${rows}</tbody></table>`;
-  printPDF("pdf-content", "Inventaire Stock Véhicule");
+    <div class="kpi-row"><div class="kpi-box"><div class="kpi-val">${liste.length}</div><div class="kpi-lbl">Arrivages prévus</div></div></div>
+    <table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Année</th><th>Arrivée prévue</th><th>Prix</th></tr></thead><tbody>${rows}</tbody></table>`;
+  printPDF("pdf-content", "Prochain Arrivage");
 };
 
 // ---------------------------------------------------------------
@@ -434,49 +417,44 @@ window.importerFichier = async function () {
 
   if (lignes.length < 2) { toast("Aucune donnée exploitable trouvée", "terr"); return; }
 
-  // Colonnes attendues : Châssis, Marque, Modèle, Couleur ext., Couleur int.,
-  // Date d'entrée (obligatoires), puis Type, Emplacement, Année, Prix (optionnels).
-  // Seules les données utiles à l'enregistrement du véhicule sont reprises.
   const lignesDonnees = lignes.slice(1).filter((l) => l.length && l[0]);
   status.textContent = `Import de ${lignesDonnees.length} ligne(s)…`;
 
   let n = 0, ignorees = 0;
   for (const l of lignesDonnees) {
-    const [chassis, marque, modele, couleurExt, couleurInt, dateEntree, type, emplacement, annee, prix] = l;
+    const [chassis, marque, modele, couleurExt, couleurInt, dateArriveePrevue, type, emplacement, annee, prix] = l;
 
-    if (!chassis || !modele || !couleurExt || !couleurInt || !dateEntree) { ignorees++; continue; }
+    if (!chassis || !modele || !couleurExt || !couleurInt || !dateArriveePrevue) { ignorees++; continue; }
+    if (await arrivageChassisExisteDeja(chassis.trim())) { ignorees++; continue; }
     if (await chassisExisteDeja(chassis.trim())) { ignorees++; continue; }
 
     const marqueTrim = (marque || "").trim();
-    await creerVehicule({
+    await creerArrivage({
       chassis: chassis.trim(),
       marque: marqueTrim,
       modele: modele.trim(),
       couleurExt: couleurExt.trim(),
       couleurInt: couleurInt.trim(),
-      dateEntree: dateEntree.trim(),
+      dateArriveePrevue: dateArriveePrevue.trim(),
       type: (type || "").trim() || typeAutomatique(marqueTrim) || "",
       emplacement: (emplacement || "").trim(),
       annee: Number(annee) || null,
       prix: Number(prix) || null,
-      statut: "stock",
       equipements: {},
     });
     n++;
   }
 
-  toast(`${n} véhicule(s) importé(s)${ignorees ? `, ${ignorees} ligne(s) ignorée(s) (champs obligatoires manquants ou châssis en double)` : ""}`);
+  toast(`${n} arrivage(s) importé(s)${ignorees ? `, ${ignorees} ligne(s) ignorée(s) (champs obligatoires manquants ou châssis en double)` : ""}`);
   closeModal("modal-import");
   fileInput.value = "";
   status.textContent = "";
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-  const params = new URLSearchParams(window.location.search);
-  const q = params.get("q");
-  if (q) document.getElementById("f-recherche").value = q;
   demarrerEcoute();
   rafraichirListeCouleurs();
   onMarqueChange();
   rafraichirFiltreModeles();
+  document.getElementById("date-entree-groupee").value = new Date().toISOString().slice(0, 10);
 });
