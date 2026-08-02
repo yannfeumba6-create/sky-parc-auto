@@ -1,6 +1,7 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
+  importerVehiculesEnMasse,
 } from "./data.js";
 
 let _vehicules = [];
@@ -135,16 +136,16 @@ function ligneTableau(v) {
   const critique = v.statut === "stock" && jours !== null && jours >= 60;
   return `
     <tr data-id="${v.id}">
-      <td class="plate">${chassis6(v.chassis)}</td>
-      <td>${v.marque || "—"}</td>
-      <td>${v.modele || "—"}</td>
-      <td>${v.type || "—"}</td>
-      <td>${v.emplacement || "—"}</td>
-      <td style="font-size:12px;">Ext : ${v.couleurExt || "—"}<br>Int : ${v.couleurInt || "—"}</td>
-      <td>${v.annee || "—"}</td>
-      <td><span class="tag ${badge}">${label}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}</td>
+      <td class="plate">${esc(chassis6(v.chassis))}</td>
+      <td>${esc(v.marque) || "—"}</td>
+      <td>${esc(v.modele) || "—"}</td>
+      <td>${esc(v.type) || "—"}</td>
+      <td>${esc(v.emplacement) || "—"}</td>
+      <td style="font-size:12px;">Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}</td>
+      <td>${esc(v.annee) || "—"}</td>
+      <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
-      <td>${v.dateEntree || "—"}</td>
+      <td>${esc(v.dateEntree) || "—"}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" data-action="modifier" data-id="${v.id}">✎</button>
         ${v.statut === "stock" ? `<button class="btn btn-ghost btn-sm" data-action="reserver" data-id="${v.id}">Réserver</button>` : ""}
@@ -326,7 +327,7 @@ document.addEventListener("click", async (e) => {
       ? `<tr><td colspan="4" class="empty-state">Aucun historique pour ce véhicule</td></tr>`
       : lignes.map((h) => {
           const d = h.horodatage?.toDate ? h.horodatage.toDate() : null;
-          return `<tr><td>${d ? d.toLocaleString("fr-FR") : "—"}</td><td>${h.action}</td><td>${STATUT_LABEL[h.statut] || h.statut || "—"}</td><td><b>${h.utilisateur || "—"}</b></td></tr>`;
+          return `<tr><td>${d ? d.toLocaleString("fr-FR") : "—"}</td><td>${esc(h.action)}</td><td>${esc(STATUT_LABEL[h.statut] || h.statut) || "—"}</td><td><b>${esc(h.utilisateur) || "—"}</b></td></tr>`;
         }).join("");
     document.getElementById("historique-vehicule-titre").textContent = `Historique — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
     openModal("modal-historique-vehicule");
@@ -354,7 +355,7 @@ window.exporterTouteLaBase = function () {
 
 window.exporterPDF = function () {
   const liste = vehiculesFiltres();
-  const rows = liste.map((v) => `<tr><td>${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td><td>${v.emplacement || "—"}</td><td>${v.annee || "—"}</td><td>${STATUT_LABEL[v.statut] || v.statut}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
+  const rows = liste.map((v) => `<tr><td>${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td><td>${esc(v.emplacement) || "—"}</td><td>${esc(v.annee) || "—"}</td><td>${esc(STATUT_LABEL[v.statut] || v.statut)}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
   document.getElementById("pdf-content").innerHTML = `
     <div class="kpi-row"><div class="kpi-box"><div class="kpi-val">${liste.length}</div><div class="kpi-lbl">Véhicules</div></div></div>
     <table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Année</th><th>Statut</th><th>Prix</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -362,7 +363,8 @@ window.exporterPDF = function () {
 };
 
 // ---------------------------------------------------------------
-// Import CSV / PDF
+// Import CSV / Excel / PDF — lecture, reconnaissance automatique des
+// colonnes, aperçu avant validation, puis import groupé.
 // ---------------------------------------------------------------
 
 function parseCSV(text) {
@@ -382,6 +384,18 @@ async function loadPDFJS() {
   });
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   _pdfjsLoaded = true;
+}
+
+let _xlsxLoaded = false;
+async function loadXLSX() {
+  if (_xlsxLoaded) return;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  _xlsxLoaded = true;
 }
 
 async function extraireLignesPDF(file) {
@@ -408,11 +422,128 @@ async function extraireLignesPDF(file) {
   return lignes;
 }
 
-window.importerFichier = async function () {
+async function extraireLignesExcel(file) {
+  await loadXLSX();
+  const buf = await file.arrayBuffer();
+  const classeur = window.XLSX.read(buf, { type: "array", cellDates: false });
+  const feuille = classeur.Sheets[classeur.SheetNames[0]];
+  return window.XLSX.utils.sheet_to_json(feuille, { header: 1, raw: false, defval: "" })
+    .map((l) => l.map((c) => String(c ?? "").trim()))
+    .filter((l) => l.some((c) => c));
+}
+
+// Reconnaissance automatique des colonnes par leur intitulé (accents, casse
+// et ordre ignorés) — évite d'imposer un ordre de colonnes strict.
+const ALIAS_COLONNES = {
+  chassis: ["chassis", "châssis", "vin", "numero de chassis", "n chassis"],
+  marque: ["marque"],
+  modele: ["modele", "modèle"],
+  couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color"],
+  couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
+  dateEntree: ["date d entree", "date entree", "date entree en stock", "date d entree en stock"],
+  type: ["type"],
+  emplacement: ["emplacement", "emplacement prevu", "site"],
+  annee: ["annee", "année"],
+  prix: ["prix", "prix prevu", "prix fcfa"],
+};
+
+function normaliser(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function detecterColonnes(entete) {
+  const mapping = {};
+  entete.forEach((brut, idx) => {
+    const n = normaliser(brut);
+    for (const [champ, alias] of Object.entries(ALIAS_COLONNES)) {
+      if (mapping[champ] !== undefined) continue;
+      if (alias.some((a) => n === a || n.includes(a))) mapping[champ] = idx;
+    }
+  });
+  return mapping;
+}
+
+function normaliserDate(v) {
+  const s = String(v || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  return s;
+}
+
+function lignesVersDonnees(lignes) {
+  if (lignes.length < 2) return { donnees: [], colonnesReconnues: false };
+  const mapping = detecterColonnes(lignes[0]);
+  const colonnesReconnues = mapping.chassis !== undefined && mapping.modele !== undefined && mapping.dateEntree !== undefined;
+
+  const get = (l, champ, idxFallback) => {
+    const idx = colonnesReconnues ? mapping[champ] : idxFallback;
+    return idx === undefined ? "" : (l[idx] || "").trim();
+  };
+
+  const donnees = lignes.slice(1).filter((l) => l.length && l.some((c) => c)).map((l) => {
+    const marque = get(l, "marque", 1);
+    return {
+      chassis: get(l, "chassis", 0),
+      marque,
+      modele: get(l, "modele", 2),
+      couleurExt: get(l, "couleurExt", 3),
+      couleurInt: get(l, "couleurInt", 4),
+      dateEntree: normaliserDate(get(l, "dateEntree", 5)),
+      type: get(l, "type", 6) || typeAutomatique(marque) || "",
+      emplacement: get(l, "emplacement", 7),
+      annee: Number(get(l, "annee", 8)) || null,
+      prix: Number(get(l, "prix", 9)) || null,
+      statut: "stock",
+      equipements: {},
+    };
+  });
+  return { donnees, colonnesReconnues };
+}
+
+// ---------------------------------------------------------------
+// État de la modale d'import + interactions (glisser-déposer, coller)
+// ---------------------------------------------------------------
+
+let _importDonnees = [];
+
+function resetModalImport() {
+  _importDonnees = [];
   const fileInput = document.getElementById("import-file");
+  if (fileInput) fileInput.value = "";
+  const nomFichier = document.getElementById("import-filename");
+  if (nomFichier) nomFichier.textContent = "";
   const status = document.getElementById("import-status");
-  const file = fileInput.files[0];
-  if (!file) { toast("Choisis un fichier", "terr"); return; }
+  if (status) status.textContent = "";
+  const previewWrap = document.getElementById("import-preview-wrap");
+  if (previewWrap) previewWrap.style.display = "none";
+  const progressWrap = document.getElementById("import-progress-wrap");
+  if (progressWrap) progressWrap.style.display = "none";
+  const bar = document.getElementById("import-progress-bar");
+  if (bar) bar.style.width = "0%";
+  const btn = document.getElementById("btn-importer");
+  if (btn) { btn.disabled = true; btn.textContent = "Importer"; }
+  const drop = document.getElementById("import-drop");
+  if (drop) drop.classList.remove("dragover");
+}
+
+window.ouvrirModalImport = function () {
+  resetModalImport();
+  openModal("modal-import");
+};
+
+window.fermerModalImport = function () {
+  closeModal("modal-import");
+  resetModalImport();
+};
+
+async function traiterFichierImport(file) {
+  const status = document.getElementById("import-status");
+  const nomFichier = document.getElementById("import-filename");
+  const btn = document.getElementById("btn-importer");
+  if (!file) return;
+  nomFichier.textContent = file.name;
+  btn.disabled = true;
   const ext = file.name.split(".").pop().toLowerCase();
 
   let lignes = [];
@@ -420,55 +551,89 @@ window.importerFichier = async function () {
     if (ext === "csv") {
       status.textContent = "Lecture du CSV…";
       lignes = parseCSV(await file.text());
+    } else if (ext === "xlsx" || ext === "xls") {
+      status.textContent = "Lecture du fichier Excel…";
+      lignes = await extraireLignesExcel(file);
     } else if (ext === "pdf") {
-      status.textContent = "Lecture du PDF (extraction basique — CSV recommandé pour un import fiable)…";
+      status.textContent = "Lecture du PDF (extraction basique — CSV/Excel recommandé pour un import fiable)…";
       lignes = await extraireLignesPDF(file);
     } else {
-      toast("Format non supporté", "terr");
+      toast("Format non supporté (CSV, Excel ou PDF uniquement)", "terr");
+      status.textContent = "";
       return;
     }
   } catch (e) {
     toast("Erreur de lecture du fichier : " + e.message, "terr");
+    status.textContent = "";
     return;
   }
 
-  if (lignes.length < 2) { toast("Aucune donnée exploitable trouvée", "terr"); return; }
+  if (lignes.length < 2) { toast("Aucune donnée exploitable trouvée dans ce fichier", "terr"); status.textContent = ""; return; }
 
-  // Colonnes attendues : Châssis, Marque, Modèle, Couleur ext., Couleur int.,
-  // Date d'entrée (obligatoires), puis Type, Emplacement, Année, Prix (optionnels).
-  // Seules les données utiles à l'enregistrement du véhicule sont reprises.
-  const lignesDonnees = lignes.slice(1).filter((l) => l.length && l[0]);
-  status.textContent = `Import de ${lignesDonnees.length} ligne(s)…`;
+  const { donnees, colonnesReconnues } = lignesVersDonnees(lignes);
+  const valides = donnees.filter((d) => d.chassis && d.modele && d.couleurExt && d.couleurInt && d.dateEntree);
+  _importDonnees = donnees;
 
-  let n = 0, ignorees = 0;
-  for (const l of lignesDonnees) {
-    const [chassis, marque, modele, couleurExt, couleurInt, dateEntree, type, emplacement, annee, prix] = l;
+  afficherApercu(donnees, colonnesReconnues);
+  status.textContent = `${donnees.length} ligne(s) détectée(s), dont ${valides.length} avec tous les champs obligatoires${colonnesReconnues ? " — colonnes reconnues automatiquement" : " — colonnes lues par position (entête non reconnue)"}.`;
+  btn.disabled = donnees.length === 0;
+}
 
-    if (!chassis || !modele || !couleurExt || !couleurInt || !dateEntree) { ignorees++; continue; }
-    if (await chassisExisteDeja(chassis.trim())) { ignorees++; continue; }
+function afficherApercu(donnees, colonnesReconnues) {
+  const wrap = document.getElementById("import-preview-wrap");
+  const head = document.getElementById("import-preview-head");
+  const body = document.getElementById("import-preview-body");
+  const count = document.getElementById("import-preview-count");
+  if (!wrap) return;
 
-    const marqueTrim = (marque || "").trim();
-    await creerVehicule({
-      chassis: chassis.trim(),
-      marque: marqueTrim,
-      modele: modele.trim(),
-      couleurExt: couleurExt.trim(),
-      couleurInt: couleurInt.trim(),
-      dateEntree: dateEntree.trim(),
-      type: (type || "").trim() || typeAutomatique(marqueTrim) || "",
-      emplacement: (emplacement || "").trim(),
-      annee: Number(annee) || null,
-      prix: Number(prix) || null,
-      statut: "stock",
-      equipements: {},
-    });
-    n++;
+  const colonnes = [
+    ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
+    ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], ["dateEntree", "Date d'entrée"],
+    ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
+  ];
+  head.innerHTML = `<tr>${colonnes.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
+  body.innerHTML = donnees.slice(0, 20).map((d) => {
+    const manquant = !d.chassis || !d.modele || !d.couleurExt || !d.couleurInt || !d.dateEntree;
+    return `<tr style="${manquant ? "color:var(--red);" : ""}">${colonnes.map(([champ]) => `<td>${esc(d[champ]) || "—"}</td>`).join("")}</tr>`;
+  }).join("");
+  count.textContent = donnees.length;
+  wrap.style.display = "block";
+  if (donnees.length > 20) {
+    body.innerHTML += `<tr><td colspan="${colonnes.length}" style="text-align:center;color:var(--muted);">… et ${donnees.length - 20} ligne(s) de plus</td></tr>`;
   }
+}
 
-  toast(`${n} véhicule(s) importé(s)${ignorees ? `, ${ignorees} ligne(s) ignorée(s) (champs obligatoires manquants ou châssis en double)` : ""}`);
-  closeModal("modal-import");
-  fileInput.value = "";
-  status.textContent = "";
+window.importerFichier = async function () {
+  const status = document.getElementById("import-status");
+  const btn = document.getElementById("btn-importer");
+  const progressWrap = document.getElementById("import-progress-wrap");
+  const bar = document.getElementById("import-progress-bar");
+
+  if (!_importDonnees.length) { toast("Choisis d'abord un fichier", "terr"); return; }
+
+  btn.disabled = true;
+  btn.textContent = "Import en cours…";
+  progressWrap.style.display = "block";
+  bar.style.width = "0%";
+  status.textContent = "Vérification des doublons…";
+
+  try {
+    const { n, ignorees, doublons } = await importerVehiculesEnMasse(_importDonnees, (fait, total) => {
+      const pct = Math.round((fait / total) * 100);
+      bar.style.width = pct + "%";
+      status.textContent = `Import en cours… ${fait}/${total}`;
+    });
+
+    const details = [];
+    if (ignorees) details.push(`${ignorees} ligne(s) ignorée(s) (champs obligatoires manquants)`);
+    if (doublons) details.push(`${doublons} châssis déjà existant(s)`);
+    toast(`${n} véhicule(s) importé(s)${details.length ? ", " + details.join(", ") : ""}`);
+    window.fermerModalImport();
+  } catch (e) {
+    toast("Erreur pendant l'import : " + e.message, "terr");
+    btn.disabled = false;
+    btn.textContent = "Importer";
+  }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -479,4 +644,24 @@ document.addEventListener("DOMContentLoaded", () => {
   rafraichirListeCouleurs();
   onMarqueChange();
   rafraichirFiltreModeles();
+
+  const fileInput = document.getElementById("import-file");
+  if (fileInput) fileInput.addEventListener("change", () => traiterFichierImport(fileInput.files[0]));
+
+  const drop = document.getElementById("import-drop");
+  if (drop) {
+    ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("dragover"); }));
+    drop.addEventListener("drop", (e) => {
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) traiterFichierImport(f);
+    });
+  }
+
+  document.addEventListener("paste", (e) => {
+    const modal = document.getElementById("modal-import");
+    if (!modal || !modal.classList.contains("open")) return;
+    const f = Array.from(e.clipboardData?.files || [])[0];
+    if (f) { e.preventDefault(); traiterFichierImport(f); }
+  });
 });

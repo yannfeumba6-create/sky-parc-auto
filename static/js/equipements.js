@@ -24,7 +24,7 @@ function rendre() {
     const reste = (e.stockPieces || 0) % ppc;
     return `
       <tr>
-        <td><b>${e.nom}</b></td>
+        <td><b>${esc(e.nom)}</b></td>
         <td>${ppc > 1 ? `Carton de ${ppc}` : "À l'unité"}</td>
         <td>${cartons}</td>
         <td>${reste}</td>
@@ -124,9 +124,13 @@ window.validerMouvementStock = async function () {
 
   if (pieces <= 0) { toast("Indique une quantité", "terr"); return; }
 
-  const nouveauStock = sens === "ajouter"
-    ? (equip.stockPieces || 0) + pieces
-    : Math.max(0, (equip.stockPieces || 0) - pieces);
+  const stockActuel = equip.stockPieces || 0;
+  if (sens === "retirer" && pieces > stockActuel) {
+    toast(`Stock insuffisant : seulement ${stockActuel} pièce(s) disponible(s) pour "${equip.nom}"`, "terr");
+    return;
+  }
+
+  const nouveauStock = sens === "ajouter" ? stockActuel + pieces : stockActuel - pieces;
 
   await updateDoc(doc(db, "equipements_stock", id), { stockPieces: nouveauStock });
   toast("Stock mis à jour");

@@ -32,9 +32,9 @@ function rendre() {
     ? `<tr><td colspan="7" class="empty-state"><strong>Aucun véhicule réservé</strong></td></tr>`
     : reserves.map((v) => `
       <tr>
-        <td class="plate">${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td>
-        <td>${v.emplacement || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
-        <td>${v.dateEntree || "—"}</td>
+        <td class="plate">${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td>
+        <td>${esc(v.emplacement) || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
+        <td>${esc(v.dateEntree) || "—"}</td>
         <td><button class="btn btn-ghost btn-sm" data-action="remettre-stock" data-id="${v.id}">Remettre en stock</button></td>
       </tr>`).join("");
 
@@ -43,8 +43,8 @@ function rendre() {
     ? `<tr><td colspan="6" class="empty-state"><strong>Aucun véhicule endommagé</strong></td></tr>`
     : endommages.map((v) => `
       <tr>
-        <td class="plate">${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td>
-        <td>${v.emplacement || "—"}</td><td>${v.piecesEndommagees || "—"}</td>
+        <td class="plate">${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td>
+        <td>${esc(v.emplacement) || "—"}</td><td>${esc(v.piecesEndommagees) || "—"}</td>
         <td><button class="btn btn-ghost btn-sm" data-action="remettre-stock" data-id="${v.id}">Remettre en stock</button></td>
       </tr>`).join("");
 }

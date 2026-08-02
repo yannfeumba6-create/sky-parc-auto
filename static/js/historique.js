@@ -37,11 +37,11 @@ function rendre() {
     const d = toDate(h.horodatage);
     return `<tr>
       <td>${d ? d.toLocaleString("fr-FR") : "—"}</td>
-      <td>${h.action || "—"}</td>
-      <td>${h.marque || ""} ${h.modele || ""}</td>
-      <td class="plate">${h.chassis || "—"}</td>
-      <td>${STATUT_LABEL[h.statut] || h.statut || "—"}</td>
-      <td><b>${h.utilisateur || "—"}</b></td>
+      <td>${esc(h.action) || "—"}</td>
+      <td>${esc(h.marque) || ""} ${esc(h.modele) || ""}</td>
+      <td class="plate">${esc(h.chassis) || "—"}</td>
+      <td>${esc(STATUT_LABEL[h.statut] || h.statut) || "—"}</td>
+      <td><b>${esc(h.utilisateur) || "—"}</b></td>
     </tr>`;
   }).join("");
 }

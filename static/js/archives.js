@@ -25,13 +25,13 @@ function rendre() {
   tbody.innerHTML = liste.map((v) => {
     const d = v.sortiLe?.toDate ? v.sortiLe.toDate() : null;
     return `<tr>
-      <td class="plate">${chassis6(v.chassis)}</td>
-      <td>${v.marque || "—"}</td>
-      <td>${v.modele || "—"}</td>
-      <td>${STATUT_LABEL[v.statut] || v.statut || "—"}</td>
-      <td>${v.client?.nom || "—"}</td>
+      <td class="plate">${esc(chassis6(v.chassis))}</td>
+      <td>${esc(v.marque) || "—"}</td>
+      <td>${esc(v.modele) || "—"}</td>
+      <td>${esc(STATUT_LABEL[v.statut] || v.statut) || "—"}</td>
+      <td>${esc(v.client?.nom) || "—"}</td>
       <td>${d ? d.toLocaleString("fr-FR") : "—"}</td>
-      <td><b>${v.sortiPar || "—"}</b></td>
+      <td><b>${esc(v.sortiPar) || "—"}</b></td>
       <td><button class="btn btn-ghost btn-sm" data-restaurer="${v.id}">Restaurer en stock</button></td>
     </tr>`;
   }).join("");

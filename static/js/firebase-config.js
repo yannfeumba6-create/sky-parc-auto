@@ -17,6 +17,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -46,5 +47,5 @@ export const arrivagesRef = collection(db, "prochains_arrivages");
 export const archivesRef = collection(db, "vehicules_archives");
 
 export {
-  doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp,
+  doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
 };

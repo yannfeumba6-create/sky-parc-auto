@@ -56,8 +56,8 @@ function rendreClients() {
     return;
   }
   el.innerHTML = clients.map(([nom, info]) => `
-    <div class="client-row" data-client="${nom}" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;">
-      <span><b>${nom}</b> — ${info.contact || "—"}</span>
+    <div class="client-row" data-client="${esc(nom)}" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;">
+      <span><b>${esc(nom)}</b> — ${esc(info.contact) || "—"}</span>
       <span class="tag badge-vendu">${info.n} véhicules · ${info.total.toLocaleString("fr-FR")} F</span>
     </div>`).join("");
 }
@@ -78,13 +78,13 @@ function rendre() {
   } else {
     tbody.innerHTML = liste.map((v) => `
       <tr>
-        <td class="plate">${chassis6(v.chassis)}</td>
-        <td>${v.marque || "—"}</td>
-        <td>${v.modele || "—"}</td>
-        <td>${v.client?.nom || "—"}</td>
-        <td>${v.client?.contact || "—"}</td>
-        <td>${v.dateEntree || "—"}</td>
-        <td>${v.client?.dateAchat || v.dateSortie || "—"}</td>
+        <td class="plate">${esc(chassis6(v.chassis))}</td>
+        <td>${esc(v.marque) || "—"}</td>
+        <td>${esc(v.modele) || "—"}</td>
+        <td>${esc(v.client?.nom) || "—"}</td>
+        <td>${esc(v.client?.contact) || "—"}</td>
+        <td>${esc(v.dateEntree) || "—"}</td>
+        <td>${esc(v.client?.dateAchat || v.dateSortie) || "—"}</td>
         <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
         <td><button class="btn btn-ghost btn-sm" data-facture="${v.id}">🧾 Facture</button></td>
       </tr>`).join("");
@@ -100,18 +100,18 @@ document.addEventListener("click", (e) => {
   const corps = `
     <table>
       <tbody>
-        <tr><td style="font-weight:700;width:35%;">Châssis</td><td>${v.chassis || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Immatriculation</td><td>${v.immatriculation || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Marque / Modèle</td><td>${v.marque || "—"} ${v.modele || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Type</td><td>${v.type || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Couleur extérieure / intérieure</td><td>${v.couleurExt || "—"} / ${v.couleurInt || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Année</td><td>${v.annee || "—"}</td></tr>
+        <tr><td style="font-weight:700;width:35%;">Châssis</td><td>${esc(v.chassis) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Immatriculation</td><td>${esc(v.immatriculation) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Marque / Modèle</td><td>${esc(v.marque) || "—"} ${esc(v.modele) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Type</td><td>${esc(v.type) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Couleur extérieure / intérieure</td><td>${esc(v.couleurExt) || "—"} / ${esc(v.couleurInt) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Année</td><td>${esc(v.annee) || "—"}</td></tr>
         <tr><td style="font-weight:700;">Prix de vente</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " FCFA" : "—"}</td></tr>
-        <tr><td style="font-weight:700;">Client</td><td>${v.client?.nom || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Contact client</td><td>${v.client?.contact || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Date d'achat</td><td>${v.client?.dateAchat || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Mode de paiement</td><td>${v.client?.modePaiement || "—"}</td></tr>
-        <tr><td style="font-weight:700;">Vendeur / agent</td><td>${v.client?.vendeur || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Client</td><td>${esc(v.client?.nom) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Contact client</td><td>${esc(v.client?.contact) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Date d'achat</td><td>${esc(v.client?.dateAchat) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Mode de paiement</td><td>${esc(v.client?.modePaiement) || "—"}</td></tr>
+        <tr><td style="font-weight:700;">Vendeur / agent</td><td>${esc(v.client?.vendeur) || "—"}</td></tr>
       </tbody>
     </table>`;
   document.getElementById("pdf-content").innerHTML = corps;
@@ -133,7 +133,7 @@ window.exporterCSV = function () {
 
 window.exporterPDF = function () {
   const liste = filtres();
-  const rows = liste.map((v) => `<tr><td>${chassis6(v.chassis)}</td><td>${v.marque || "—"}</td><td>${v.modele || "—"}</td><td>${v.client?.nom || "—"}</td><td>${v.dateEntree || "—"}</td><td>${v.client?.dateAchat || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
+  const rows = liste.map((v) => `<tr><td>${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td><td>${esc(v.client?.nom) || "—"}</td><td>${esc(v.dateEntree) || "—"}</td><td>${esc(v.client?.dateAchat) || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
   document.getElementById("pdf-content").innerHTML = `<table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Client</th><th>Entrée</th><th>Achat</th><th>Prix</th></tr></thead><tbody>${rows}</tbody></table>`;
   printPDF("pdf-content", "Véhicules Vendus");
 };

@@ -166,7 +166,7 @@ function rendreTop10() {
   } else {
     el.innerHTML = top10.map(([nom, n], i) => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
-        <span><b style="font-family:var(--font-title);color:var(--red);margin-right:8px;">${i + 1}</b>${nom}</span>
+        <span><b style="font-family:var(--font-title);color:var(--red);margin-right:8px;">${i + 1}</b>${esc(nom)}</span>
         <span class="tag">${n} véhicule${n > 1 ? "s" : ""}</span>
       </div>`).join("");
   }

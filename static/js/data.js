@@ -1,6 +1,6 @@
 import {
   db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef,
-  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp,
+  doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
 } from "./firebase-config.js";
 
 export const STATUT_LABEL = { stock: "En stock", reserve: "Réservé", vendu: "Vendu", endommage: "Endommagé" };
@@ -51,14 +51,22 @@ export async function getVehicule(id) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+// Un châssis (VIN) est normalisé en majuscules sans espaces superflus, pour
+// que la détection de doublon soit fiable qu'il soit saisi à la main ou
+// importé (évite qu'un "vf1..." et un "VF1..." soient vus comme différents).
+export function normaliserChassis(c) {
+  return (c || "").trim().toUpperCase();
+}
+
 export async function chassisExisteDeja(chassis, excludeId) {
   if (!chassis) return false;
-  const q = query(vehiculesRef, where("chassis", "==", chassis.trim()));
+  const q = query(vehiculesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
   return snap.docs.some((d) => d.id !== excludeId);
 }
 
 export async function creerVehicule(donnees) {
+  if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.creeLe = serverTimestamp();
   donnees.creePar = window.UTILISATEUR || "";
   donnees.equipementsAppliques = donnees.equipements || {};
@@ -75,7 +83,7 @@ export async function creerVehicule(donnees) {
 // la pré-liste elle-même.
 export async function retirerArrivageParChassis(chassis) {
   if (!chassis) return;
-  const q = query(arrivagesRef, where("chassis", "==", chassis.trim()));
+  const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
   for (const d of snap.docs) {
     await deleteDoc(doc(db, "prochains_arrivages", d.id));
@@ -115,6 +123,7 @@ export async function ajusterStockEquipements(ancien, nouveau) {
 }
 
 export async function majVehicule(id, donnees) {
+  if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   const existant = await getDoc(doc(db, "vehicules", id));
   const donneesActuelles = existant.exists() ? existant.data() : {};
   const ancienEquip = donneesActuelles.equipementsAppliques || {};
@@ -228,12 +237,14 @@ export async function getArrivage(id) {
 }
 
 export async function creerArrivage(donnees) {
+  if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.creeLe = serverTimestamp();
   donnees.creePar = window.UTILISATEUR || "";
   await addDoc(arrivagesRef, donnees);
 }
 
 export async function majArrivage(id, donnees) {
+  if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.misAJour = serverTimestamp();
   await updateDoc(doc(db, "prochains_arrivages", id), donnees);
 }
@@ -244,9 +255,137 @@ export async function supprimerArrivage(id) {
 
 export async function arrivageChassisExisteDeja(chassis, excludeId) {
   if (!chassis) return false;
-  const q = query(arrivagesRef, where("chassis", "==", chassis.trim()));
+  const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
   return snap.docs.some((d) => d.id !== excludeId);
+}
+
+// ---------------------------------------------------------------
+// Import groupé (CSV / Excel / PDF) — optimisé pour de gros volumes.
+//
+// L'ancienne version faisait 2 requêtes Firestore PAR LIGNE (vérif
+// doublon dans "vehicules" + dans "prochains_arrivages"), soit plus
+// de 300 allers-retours réseau pour 150 lignes -> import qui semblait
+// figé pendant de longues minutes.
+//
+// Ici, on récupère UNE SEULE FOIS la liste des châssis déjà connus
+// (stock + arrivages), puis on écrit tout en un lot groupé (writeBatch),
+// avec un seul commit réseau par tranche de 450 lignes (limite Firestore
+// = 500 opérations par batch).
+// ---------------------------------------------------------------
+
+export async function chassisConnusExistants() {
+  const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
+  const set = new Set();
+  vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); });
+  arrSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); });
+  return set;
+}
+
+export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
+  const existants = await chassisConnusExistants();
+  const vuDansFichier = new Set();
+  let n = 0, ignorees = 0, doublons = 0;
+  const utilisateur = window.UTILISATEUR || "";
+  const total = donneesLignes.length;
+
+  let batch = writeBatch(db);
+  let compteur = 0;
+
+  const flush = async () => {
+    if (compteur > 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+      compteur = 0;
+    }
+  };
+
+  for (let i = 0; i < donneesLignes.length; i++) {
+    const donnees = donneesLignes[i];
+    const chassisKey = normaliserChassis(donnees.chassis);
+
+    if (!chassisKey || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateArriveePrevue) {
+      ignorees++;
+    } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
+      doublons++;
+    } else {
+      vuDansFichier.add(chassisKey);
+      const ref = doc(arrivagesRef);
+      batch.set(ref, { ...donnees, chassis: chassisKey, creeLe: serverTimestamp(), creePar: utilisateur });
+      n++;
+      compteur++;
+      if (compteur >= 450) await flush();
+    }
+
+    if (onProgress && (i % 10 === 0 || i === total - 1)) onProgress(i + 1, total);
+  }
+  await flush();
+
+  return { n, ignorees, doublons };
+}
+
+// Import groupé pour la page Stock véhicule — même principe que pour les
+// arrivages : une seule lecture des châssis + pré-liste arrivages existants,
+// puis toutes les écritures (véhicule + entrée d'historique + retrait éventuel
+// de la pré-liste arrivage) regroupées en batch. Les équipements ne sont pas
+// gérés à l'import (toujours vides), donc pas d'ajustement de stock équipements
+// nécessaire ici.
+export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
+  const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
+  const existants = new Set();
+  vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) existants.add(c); });
+  const arrivageIdParChassis = new Map();
+  arrSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) arrivageIdParChassis.set(c, d.id); });
+
+  const vuDansFichier = new Set();
+  let n = 0, ignorees = 0, doublons = 0;
+  const utilisateur = window.UTILISATEUR || "";
+  const total = donneesLignes.length;
+
+  let batch = writeBatch(db);
+  let compteur = 0;
+  const flush = async () => {
+    if (compteur > 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+      compteur = 0;
+    }
+  };
+
+  for (let i = 0; i < donneesLignes.length; i++) {
+    const donnees = donneesLignes[i];
+    const chassisKey = normaliserChassis(donnees.chassis);
+
+    if (!chassisKey || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateEntree) {
+      ignorees++;
+    } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
+      doublons++;
+    } else {
+      vuDansFichier.add(chassisKey);
+      const ref = doc(vehiculesRef);
+      batch.set(ref, {
+        ...donnees, chassis: chassisKey, statut: "stock", equipements: {}, equipementsAppliques: {},
+        creeLe: serverTimestamp(), creePar: utilisateur,
+      });
+      batch.set(doc(historiqueRef), {
+        action: "Entrée en stock", chassis: chassisKey, marque: donnees.marque || "", modele: donnees.modele || "",
+        emplacement: donnees.emplacement || "", statut: "stock", prix: donnees.prix || null, client: "",
+        utilisateur, horodatage: serverTimestamp(),
+      });
+      let operations = 2;
+      const arrivageId = arrivageIdParChassis.get(chassisKey);
+      if (arrivageId) { batch.delete(doc(db, "prochains_arrivages", arrivageId)); operations = 3; }
+
+      n++;
+      compteur += operations;
+      if (compteur >= 400) await flush();
+    }
+
+    if (onProgress && (i % 10 === 0 || i === total - 1)) onProgress(i + 1, total);
+  }
+  await flush();
+
+  return { n, ignorees, doublons };
 }
 
 // Fait entrer un véhicule du prochain arrivage directement dans le stock :

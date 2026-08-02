@@ -6,7 +6,7 @@
 
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
   <button class="btn btn-red" onclick="openNouveauVehicule()">+ Nouveau véhicule</button>
-  <button class="btn btn-ghost" onclick="openModal('modal-import')">↑ Importer (CSV/PDF)</button>
+  <button class="btn btn-ghost" onclick="ouvrirModalImport()">↑ Importer (CSV/Excel/PDF)</button>
   <button class="btn btn-ghost" onclick="exporterCSV()">↓ CSV (filtré)</button>
   <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
   <button class="btn btn-ghost" onclick="exporterTouteLaBase()">↓ Exporter toute la base</button>
@@ -151,13 +151,33 @@
 <!-- MODAL — Import -->
 <div class="modal-bg" id="modal-import">
   <div class="modal">
-    <div class="modal-header"><div class="modal-title">IMPORTER DES VÉHICULES</div><button class="modal-close" onclick="closeModal('modal-import')">✕</button></div>
+    <div class="modal-header"><div class="modal-title">IMPORTER DES VÉHICULES</div><button class="modal-close" onclick="fermerModalImport()">✕</button></div>
     <div class="modal-body">
-      <div class="info-box">Colonnes attendues (CSV) : <strong>Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure, Date d'entrée</strong> (obligatoires), puis en option Type, Emplacement, Année, Prix. Seules les données utiles à l'enregistrement du véhicule sont reprises ; le reste est ignoré. Si le type n'est pas fourni, il est déduit automatiquement pour Jetour/Soueast (SUV) et JMC (Pick-up) — à préciser toi-même pour Howo Sinotruk. Formats acceptés : CSV ou PDF (tableau simple).</div>
-      <div class="form-group" style="margin-top:12px;"><label>Fichier</label><input type="file" id="import-file" accept=".csv,.pdf"></div>
-      <div id="import-status" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+      <div class="info-box">Colonnes reconnues automatiquement, dans n'importe quel ordre : <strong>Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure, Date d'entrée</strong> (obligatoires), puis en option Type, Emplacement, Année, Prix. Si le type n'est pas fourni, il est déduit automatiquement pour Jetour/Soueast (SUV) et JMC (Pick-up) — à préciser toi-même pour Howo Sinotruk. Formats acceptés : <strong>CSV, Excel (.xlsx/.xls) ou PDF</strong> (tableau simple).</div>
+
+      <label id="import-drop" for="import-file" class="import-drop">
+        <div>📄 Glisse un fichier ici, colle-le avec <strong>Ctrl+V</strong>, ou clique pour choisir un fichier</div>
+        <input type="file" id="import-file" accept=".csv,.pdf,.xlsx,.xls" style="display:none;">
+      </label>
+      <div id="import-filename" class="import-filename"></div>
+
+      <div id="import-preview-wrap" style="display:none;margin-top:14px;">
+        <div class="section-lbl">Aperçu (<span id="import-preview-count">0</span> ligne(s) détectée(s))</div>
+        <div class="import-preview-scroll">
+          <table><thead id="import-preview-head"></thead><tbody id="import-preview-body"></tbody></table>
+        </div>
+      </div>
+
+      <div id="import-progress-wrap" style="display:none;margin-top:12px;">
+        <div class="import-progress-track"><div id="import-progress-bar" class="import-progress-bar"></div></div>
+      </div>
+
+      <div id="import-status" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-import')">Annuler</button><button class="btn btn-red" onclick="importerFichier()">Importer</button></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="fermerModalImport()">Annuler</button>
+      <button class="btn btn-red" id="btn-importer" onclick="importerFichier()" disabled>Importer</button>
+    </div>
   </div>
 </div>
 
