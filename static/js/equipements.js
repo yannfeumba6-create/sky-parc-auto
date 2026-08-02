@@ -1,11 +1,12 @@
 import {
-  db, equipementsRef,
+  db, equipementsRef, authPrete,
   doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy,
 } from "./firebase-config.js";
 
 let _equipements = [];
 
 async function charger() {
+  await authPrete;
   const q = query(equipementsRef, orderBy("nom"));
   const snap = await getDocs(q);
   _equipements = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -55,6 +56,7 @@ window.onConditionnementChange = function () {
 };
 
 window.creerEquipement = async function () {
+  await authPrete;
   const selectVal = document.getElementById("ne-nom-select").value;
   const nom = selectVal === "__autre__" ? document.getElementById("ne-nom-libre").value.trim() : selectVal;
   if (!nom) { toast("Le nom est requis", "terr"); return; }
@@ -76,6 +78,7 @@ window.creerEquipement = async function () {
 
 window.chargerBase = async function () {
   if (!confirm("Ajouter les équipements de base (Extincteur, Tapis, Chasuble, Cric, Caisse à outils) avec un stock à 0 ?")) return;
+  await authPrete;
   for (const e of window.EQUIPEMENTS_BASE || []) {
     const existe = _equipements.some((x) => x.nom.toLowerCase() === e.nom.toLowerCase());
     if (!existe) await addDoc(equipementsRef, { nom: e.nom, piecesParCarton: e.piecesParCarton, stockPieces: 0 });
@@ -107,11 +110,12 @@ document.addEventListener("click", (e) => {
 
   if (action === "supprimer") {
     if (!confirm(`Supprimer "${equip.nom}" du stock d'équipements ?`)) return;
-    deleteDoc(doc(db, "equipements_stock", id)).then(() => { toast("Équipement supprimé"); charger(); });
+    authPrete.then(() => deleteDoc(doc(db, "equipements_stock", id))).then(() => { toast("Équipement supprimé"); charger(); });
   }
 });
 
 window.validerMouvementStock = async function () {
+  await authPrete;
   const id = document.getElementById("se-id").value;
   const sens = document.getElementById("se-sens").value;
   const equip = _equipements.find((x) => x.id === id);

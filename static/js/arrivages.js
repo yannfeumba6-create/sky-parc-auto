@@ -417,13 +417,42 @@ async function extraireLignesExcel(file) {
 
 // Reconnaissance automatique des colonnes par leur intitulé (accents,
 // casse et ordre ignorés) — évite d'imposer un ordre de colonnes strict.
+// ---------------------------------------------------------------
+// Reconnaissance des colonnes — deux passes :
+//  1) Par intitulé d'en-tête (si le fichier a une ligne d'en-tête lisible)
+//  2) Par CONTENU : on regarde ce qu'il y a réellement dans chaque colonne
+//     (un châssis ressemble à un VIN, une marque correspond à la liste des
+//     marques connues, un modèle à la liste des modèles de cette marque,
+//     une date à un format de date, etc.) — utile pour les PDF où le texte
+//     extrait n'a pas d'en-tête exploitable, ou dont l'ordre des colonnes
+//     ne correspond pas à ce qu'on attendait.
+// Dans tous les cas, la correspondance devinée reste modifiable à la main
+// via les listes déroulantes affichées au-dessus de l'aperçu, et chaque
+// valeur de l'aperçu est éditable individuellement avant l'import.
+// ---------------------------------------------------------------
+
+const CHAMP_DATE = "dateArriveePrevue";
+const CHAMPS_IMPORT = [
+  { cle: "", label: "— Ignorer —" },
+  { cle: "chassis", label: "Châssis" },
+  { cle: "marque", label: "Marque" },
+  { cle: "modele", label: "Modèle" },
+  { cle: "type", label: "Type" },
+  { cle: "couleurExt", label: "Couleur ext." },
+  { cle: "couleurInt", label: "Couleur int." },
+  { cle: "emplacement", label: "Emplacement" },
+  { cle: CHAMP_DATE, label: "Arrivée prévue" },
+  { cle: "annee", label: "Année" },
+  { cle: "prix", label: "Prix" },
+];
+
 const ALIAS_COLONNES = {
   chassis: ["chassis", "châssis", "vin", "numero de chassis", "n chassis"],
   marque: ["marque"],
   modele: ["modele", "modèle"],
   couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color"],
   couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
-  dateArriveePrevue: ["date d arrivee prevue", "date arrivee prevue", "date d arrivee", "date arrivee", "date prevue"],
+  [CHAMP_DATE]: ["date d arrivee prevue", "date arrivee prevue", "date d arrivee", "date arrivee", "date prevue"],
   type: ["type"],
   emplacement: ["emplacement", "emplacement prevu", "site"],
   annee: ["annee", "année"],
@@ -434,7 +463,7 @@ function normaliser(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function detecterColonnes(entete) {
+function detecterColonnesParEntete(entete) {
   const mapping = {};
   entete.forEach((brut, idx) => {
     const n = normaliser(brut);
@@ -446,8 +475,6 @@ function detecterColonnes(entete) {
   return mapping;
 }
 
-const ORDRE_POSITIONNEL = ["chassis", "marque", "modele", "couleurExt", "couleurInt", "dateArriveePrevue", "type", "emplacement", "annee", "prix"];
-
 // Convertit une date DD/MM/YYYY ou DD-MM-YYYY en YYYY-MM-DD ; laisse
 // intact ce qui est déjà au bon format ou non reconnu.
 function normaliserDate(v) {
@@ -458,43 +485,111 @@ function normaliserDate(v) {
   return s;
 }
 
-function lignesVersDonnees(lignes) {
-  if (lignes.length < 2) return { donnees: [], colonnesReconnues: false };
-  const mapping = detecterColonnes(lignes[0]);
-  const colonnesReconnues = mapping.chassis !== undefined && mapping.modele !== undefined && mapping.dateArriveePrevue !== undefined;
+function optionsDe(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return [];
+  return Array.from(sel.options).map((o) => o.value).filter(Boolean);
+}
 
-  const get = (l, champ, idxFallback) => {
-    const idx = colonnesReconnues ? mapping[champ] : idxFallback;
-    return idx === undefined ? "" : (l[idx] || "").trim();
-  };
+// Devine la correspondance colonne → champ en se basant sur le CONTENU des
+// cellules (indépendant de tout intitulé d'en-tête). Retourne un tableau
+// mappingParColonne[indexColonne] = "chassis" | "marque" | … | "" .
+function detecterColonnesParContenu(lignes) {
+  const nbCol = Math.max(...lignes.map((l) => l.length));
+  const echantillon = lignes.slice(0, 30);
+  const marques = optionsDe("v-marque");
+  const types = optionsDe("v-type");
+  const emplacements = optionsDe("v-emplacement");
+  const modelesTous = Object.values(MODELES_PAR_MARQUE).flat().map((m) => m.toLowerCase());
 
-  const lignesDonnees = colonnesReconnues ? lignes.slice(1) : lignes.slice(1);
-  const donnees = lignesDonnees.filter((l) => l.length && l.some((c) => c)).map((l) => {
-    const marque = get(l, "marque", 1);
+  const estVIN = (v) => /^[a-z0-9]{9,18}$/i.test(v) && /[0-9]/.test(v) && /[a-z]/i.test(v);
+  const estDate = (v) => /^\d{4}-\d{2}-\d{2}/.test(v) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(v);
+  const estAnnee = (v) => /^(19|20)\d{2}$/.test(v);
+  const estNombre = (v) => /^\d+([.,]\d+)?$/.test(v.replace(/\s/g, ""));
+
+  const scores = [];
+  for (let c = 0; c < nbCol; c++) {
+    const valeurs = echantillon.map((l) => (l[c] || "").trim()).filter(Boolean);
+    if (valeurs.length === 0) continue;
+    const frac = (fn) => valeurs.filter((v) => fn(v)).length / valeurs.length;
+    const fracListe = (liste) => valeurs.filter((v) => liste.some((ref) => ref.toLowerCase() === v.toLowerCase())).length / valeurs.length;
+
+    scores.push({ col: c, champ: "chassis", score: frac(estVIN) });
+    scores.push({ col: c, champ: "marque", score: fracListe(marques) });
+    scores.push({ col: c, champ: "modele", score: valeurs.filter((v) => modelesTous.includes(v.toLowerCase())).length / valeurs.length });
+    scores.push({ col: c, champ: "type", score: fracListe(types) });
+    scores.push({ col: c, champ: "emplacement", score: fracListe(emplacements) });
+    scores.push({ col: c, champ: CHAMP_DATE, score: frac(estDate) });
+    scores.push({ col: c, champ: "annee", score: frac(estAnnee) });
+    scores.push({ col: c, champ: "prix", score: frac((v) => estNombre(v) && !estAnnee(v) && Number(v.replace(/\s/g, "")) >= 1000) });
+  }
+
+  // Assignation gloutonne : on prend les meilleurs scores en premier, une
+  // colonne et un champ ne peuvent être utilisés qu'une seule fois.
+  scores.sort((a, b) => b.score - a.score);
+  const mappingParColonne = new Array(nbCol).fill("");
+  const champsPris = new Set();
+  for (const s of scores) {
+    if (s.score < 0.6) break;
+    if (mappingParColonne[s.col] || champsPris.has(s.champ)) continue;
+    mappingParColonne[s.col] = s.champ;
+    champsPris.add(s.champ);
+  }
+
+  // Colonnes textuelles restantes (ni numériques ni déjà assignées) : on
+  // suppose que ce sont des couleurs (aucun contenu-signature fiable pour
+  // les distinguer autrement), dans l'ordre où elles apparaissent.
+  const champsCouleur = ["couleurExt", "couleurInt"];
+  for (let c = 0; c < nbCol && champsCouleur.length; c++) {
+    if (mappingParColonne[c]) continue;
+    const valeurs = echantillon.map((l) => (l[c] || "").trim()).filter(Boolean);
+    if (valeurs.length === 0) continue;
+    const toutNumerique = valeurs.every((v) => estNombre(v));
+    if (toutNumerique) continue; // probablement une colonne numérique non reconnue (n° de ligne…) -> ignorée
+    mappingParColonne[c] = champsCouleur.shift();
+  }
+
+  return mappingParColonne;
+}
+
+// Construit les objets "donnees" utilisables pour l'import à partir des
+// lignes brutes du fichier et d'une correspondance colonne → champ.
+function construireDonnees(lignesDonnees, mappingParColonne) {
+  return lignesDonnees.filter((l) => l.length && l.some((c) => c)).map((l) => {
+    const val = (champ) => {
+      const idx = mappingParColonne.indexOf(champ);
+      return idx === -1 ? "" : (l[idx] || "").trim();
+    };
+    const marque = val("marque");
     return {
-      chassis: get(l, "chassis", 0),
+      chassis: val("chassis"),
       marque,
-      modele: get(l, "modele", 2),
-      couleurExt: get(l, "couleurExt", 3),
-      couleurInt: get(l, "couleurInt", 4),
-      dateArriveePrevue: normaliserDate(get(l, "dateArriveePrevue", 5)),
-      type: get(l, "type", 6) || typeAutomatique(marque) || "",
-      emplacement: get(l, "emplacement", 7),
-      annee: Number(get(l, "annee", 8)) || null,
-      prix: Number(get(l, "prix", 9)) || null,
+      modele: val("modele"),
+      couleurExt: val("couleurExt"),
+      couleurInt: val("couleurInt"),
+      [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
+      type: val("type") || typeAutomatique(marque) || "",
+      emplacement: val("emplacement"),
+      annee: Number(val("annee")) || null,
+      prix: Number(val("prix")) || null,
       equipements: {},
     };
   });
-  return { donnees, colonnesReconnues };
 }
 
 // ---------------------------------------------------------------
 // État de la modale d'import + interactions (glisser-déposer, coller)
 // ---------------------------------------------------------------
 
-let _importDonnees = [];
+let _lignesBrutes = [];      // toutes les lignes du fichier telles que lues
+let _ligneEnteteExiste = false; // la 1re ligne est-elle une en-tête à exclure des données ?
+let _mappingParColonne = []; // mappingParColonne[indexColonne] = champ ("" = ignorer)
+let _importDonnees = [];     // dérivé de _lignesBrutes + _mappingParColonne, avec les corrections manuelles
 
 function resetModalImport() {
+  _lignesBrutes = [];
+  _ligneEnteteExiste = false;
+  _mappingParColonne = [];
   _importDonnees = [];
   const fileInput = document.getElementById("import-file");
   if (fileInput) fileInput.value = "";
@@ -502,6 +597,8 @@ function resetModalImport() {
   if (nomFichier) nomFichier.textContent = "";
   const status = document.getElementById("import-status");
   if (status) status.textContent = "";
+  const mappingWrap = document.getElementById("import-mapping-wrap");
+  if (mappingWrap) { mappingWrap.style.display = "none"; mappingWrap.innerHTML = ""; }
   const previewWrap = document.getElementById("import-preview-wrap");
   if (previewWrap) previewWrap.style.display = "none";
   const progressWrap = document.getElementById("import-progress-wrap");
@@ -555,40 +652,140 @@ async function traiterFichierImport(file) {
     return;
   }
 
-  if (lignes.length < 2) { toast("Aucune donnée exploitable trouvée dans ce fichier", "terr"); status.textContent = ""; return; }
+  if (lignes.length < 1) { toast("Aucune donnée exploitable trouvée dans ce fichier", "terr"); status.textContent = ""; return; }
 
-  const { donnees, colonnesReconnues } = lignesVersDonnees(lignes);
-  const valides = donnees.filter((d) => d.chassis && d.modele && d.couleurExt && d.couleurInt && d.dateArriveePrevue);
-  _importDonnees = donnees;
+  _lignesBrutes = lignes;
+  const mappingEntete = detecterColonnesParEntete(lignes[0] || []);
+  // On considère qu'il y a une vraie ligne d'en-tête si au moins 2 champs
+  // ont été reconnus par leur intitulé (sinon, l'en-tête n'est probablement
+  // pas exploitable — cas fréquent avec un PDF — et on la traite comme une
+  // ligne de données, en devinant tout par le contenu).
+  _ligneEnteteExiste = Object.keys(mappingEntete).length >= 2;
 
-  afficherApercu(donnees, colonnesReconnues);
-  status.textContent = `${donnees.length} ligne(s) détectée(s), dont ${valides.length} avec tous les champs obligatoires${colonnesReconnues ? " — colonnes reconnues automatiquement" : " — colonnes lues par position (entête non reconnue)"}.`;
-  btn.disabled = donnees.length === 0;
+  if (_ligneEnteteExiste) {
+    const nbCol = Math.max(...lignes.map((l) => l.length));
+    _mappingParColonne = new Array(nbCol).fill("");
+    Object.entries(mappingEntete).forEach(([champ, idx]) => { _mappingParColonne[idx] = champ; });
+  } else {
+    _mappingParColonne = detecterColonnesParContenu(lignes);
+  }
+
+  recalculerEtAfficher();
+  btn.disabled = _importDonnees.length === 0;
 }
 
-function afficherApercu(donnees, colonnesReconnues) {
+function lignesDonneesActuelles() {
+  return _ligneEnteteExiste ? _lignesBrutes.slice(1) : _lignesBrutes;
+}
+
+function recalculerEtAfficher() {
+  _importDonnees = construireDonnees(lignesDonneesActuelles(), _mappingParColonne);
+  afficherMapping();
+  afficherApercu();
+  const valides = _importDonnees.filter(estLigneValide);
+  const status = document.getElementById("import-status");
+  status.textContent = `${_importDonnees.length} ligne(s) détectée(s), dont ${valides.length} avec tous les champs obligatoires. Vérifie la correspondance des colonnes ci-dessous et corrige au besoin.`;
+  const btn = document.getElementById("btn-importer");
+  if (btn) btn.disabled = _importDonnees.length === 0;
+}
+
+function estLigneValide(d) {
+  return !!(d.chassis && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE]);
+}
+
+// Affiche, au-dessus de l'aperçu, une liste déroulante par colonne du
+// fichier source pour que l'utilisateur puisse corriger lui-même la
+// correspondance si la détection automatique (en-tête ou contenu) s'est
+// trompée — cas typique d'un PDF avec une colonne "N°" inattendue qui
+// décale tout le reste.
+function afficherMapping() {
+  const wrap = document.getElementById("import-mapping-wrap");
+  if (!wrap) return;
+  const ligneRef = _lignesBrutes[_ligneEnteteExiste ? 0 : 0] || [];
+  const ligneExemple = lignesDonneesActuelles()[0] || [];
+
+  wrap.innerHTML = `
+    <div class="section-lbl">Correspondance des colonnes du fichier</div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:4px 0 10px;">
+      <input type="checkbox" id="import-entete-toggle" ${_ligneEnteteExiste ? "checked" : ""}>
+      La première ligne du fichier est un en-tête (à exclure des données)
+    </label>
+    <div class="import-mapping-grid">
+      ${_mappingParColonne.map((champ, idx) => `
+        <div class="import-mapping-col">
+          <div class="import-mapping-exemple" title="Exemple de contenu de cette colonne">${esc((ligneExemple[idx] || "—").toString().slice(0, 22))}</div>
+          <select data-col="${idx}" class="import-mapping-select">
+            ${CHAMPS_IMPORT.map((c) => `<option value="${c.cle}" ${c.cle === champ ? "selected" : ""}>${c.label}</option>`).join("")}
+          </select>
+        </div>`).join("")}
+    </div>`;
+  wrap.style.display = "block";
+
+  document.getElementById("import-entete-toggle").addEventListener("change", (e) => {
+    _ligneEnteteExiste = e.target.checked;
+    recalculerEtAfficher();
+  });
+  wrap.querySelectorAll(".import-mapping-select").forEach((sel) => {
+    sel.addEventListener("change", (e) => {
+      const idx = Number(e.target.dataset.col);
+      const champ = e.target.value;
+      // Un champ ne peut être utilisé que sur une seule colonne à la fois.
+      if (champ) _mappingParColonne = _mappingParColonne.map((c, i) => (i !== idx && c === champ ? "" : c));
+      _mappingParColonne[idx] = champ;
+      recalculerEtAfficher();
+    });
+  });
+}
+
+const COLONNES_APERCU = [
+  ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
+  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], [CHAMP_DATE, "Arrivée prévue"],
+  ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
+];
+
+// Aperçu ÉDITABLE : chaque cellule est un champ de saisie relié directement
+// à _importDonnees, pour corriger une valeur mal extraite (OCR/PDF, colonne
+// mal reconnue…) sans devoir d'abord importer puis rouvrir chaque fiche.
+function afficherApercu() {
   const wrap = document.getElementById("import-preview-wrap");
   const head = document.getElementById("import-preview-head");
   const body = document.getElementById("import-preview-body");
   const count = document.getElementById("import-preview-count");
   if (!wrap) return;
 
-  const colonnes = [
-    ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
-    ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], ["dateArriveePrevue", "Arrivée prévue"],
-    ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
-  ];
-  head.innerHTML = `<tr>${colonnes.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
-  body.innerHTML = donnees.slice(0, 20).map((d) => {
-    const manquant = !d.chassis || !d.modele || !d.couleurExt || !d.couleurInt || !d.dateArriveePrevue;
-    return `<tr style="${manquant ? "color:var(--red);" : ""}">${colonnes.map(([champ]) => `<td>${esc(d[champ]) || "—"}</td>`).join("")}</tr>`;
+  const LIMITE = 40;
+  head.innerHTML = `<tr>${COLONNES_APERCU.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
+  body.innerHTML = _importDonnees.slice(0, LIMITE).map((d, i) => {
+    const manquant = !estLigneValide(d);
+    return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) =>
+      `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`
+    ).join("")}</tr>`;
   }).join("");
-  count.textContent = donnees.length;
+  count.textContent = _importDonnees.length;
   wrap.style.display = "block";
-  if (donnees.length > 20) {
-    body.innerHTML += `<tr><td colspan="${colonnes.length}" style="text-align:center;color:var(--muted);">… et ${donnees.length - 20} ligne(s) de plus</td></tr>`;
+  if (_importDonnees.length > LIMITE) {
+    body.innerHTML += `<tr><td colspan="${COLONNES_APERCU.length}" style="text-align:center;color:var(--muted);">… et ${_importDonnees.length - LIMITE} ligne(s) de plus (import intégral quand même)</td></tr>`;
   }
+
+  body.querySelectorAll(".import-cell").forEach((input) => {
+    input.addEventListener("change", (e) => {
+      const i = Number(e.target.dataset.ligne);
+      const champ = e.target.dataset.champ;
+      let v = e.target.value.trim();
+      if (champ === "annee" || champ === "prix") v = Number(v) || null;
+      if (champ === CHAMP_DATE) v = normaliserDate(v);
+      _importDonnees[i][champ] = v;
+
+      const ligne = e.target.closest("tr");
+      ligne.classList.toggle("ligne-incomplete", !estLigneValide(_importDonnees[i]));
+      const valides = _importDonnees.filter(estLigneValide);
+      document.getElementById("import-status").textContent =
+        `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;
+    });
+  });
 }
+
+
 
 window.importerFichier = async function () {
   const status = document.getElementById("import-status");

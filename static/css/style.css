@@ -146,6 +146,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--red);box
 .import-preview-scroll td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap;}
 .import-progress-track{height:8px;border-radius:5px;background:var(--surface2);overflow:hidden;}
 .import-progress-bar{height:100%;width:0%;background:var(--red);transition:width .15s;}
+.import-mapping-grid{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;}
+.import-mapping-col{min-width:120px;flex:0 0 auto;}
+.import-mapping-exemple{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;padding:0 2px;}
+.import-mapping-select{width:100%;font-size:11.5px;padding:5px 4px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);}
+.import-preview-scroll td{padding:2px 3px !important;}
+.import-cell{width:100%;min-width:80px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;padding:4px 6px;border-radius:4px;}
+.import-cell:hover{border-color:var(--border);}
+.import-cell:focus{border-color:var(--red);background:var(--surface);outline:none;}
+tr.ligne-incomplete .import-cell{color:var(--red);}
 
 /* ══════════════════════════════════════════════
    RESPONSIVE — Mobile & Tablette

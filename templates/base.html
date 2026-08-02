@@ -175,6 +175,19 @@ document.getElementById('recherche-globale').addEventListener('keydown', (e) => 
 });
 
 window.addEventListener('DOMContentLoaded', applyTheme);
+
+// Filet de sécurité : si une opération Firestore échoue quelque part dans
+// l'appli avec une erreur de permission (mauvaise configuration des règles
+// de sécurité, jeton expiré, etc.) et que le code appelant n'a pas de
+// try/catch dédié, on affiche un message clair plutôt qu'un échec silencieux.
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = e.reason?.message || String(e.reason || '');
+  const code = e.reason?.code || '';
+  if (code === 'permission-denied' || /insufficient permissions/i.test(msg)) {
+    toast("Accès à la base de données refusé — reconnecte-toi (⏻) ou préviens l'administrateur si ça persiste.", 'terr');
+    e.preventDefault();
+  }
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>

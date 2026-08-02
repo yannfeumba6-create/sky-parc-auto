@@ -1,5 +1,5 @@
 import {
-  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef,
+  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef, authPrete,
   doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
 } from "./firebase-config.js";
 
@@ -33,7 +33,8 @@ export function typeAutomatique(marque) {
 // Écoute en temps réel (affiche d'abord le cache local instantanément, puis
 // se met à jour dès que le serveur répond — beaucoup plus rapide à l'écran
 // qu'un chargement à chaque visite de page).
-export function ecouterVehicules(callback) {
+export async function ecouterVehicules(callback) {
+  await authPrete;
   const q = query(vehiculesRef, orderBy("dateEntree", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -41,12 +42,14 @@ export function ecouterVehicules(callback) {
 }
 
 export async function chargerVehicules() {
+  await authPrete;
   const q = query(vehiculesRef, orderBy("dateEntree", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getVehicule(id) {
+  await authPrete;
   const snap = await getDoc(doc(db, "vehicules", id));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
@@ -59,6 +62,7 @@ export function normaliserChassis(c) {
 }
 
 export async function chassisExisteDeja(chassis, excludeId) {
+  await authPrete;
   if (!chassis) return false;
   const q = query(vehiculesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
@@ -66,6 +70,7 @@ export async function chassisExisteDeja(chassis, excludeId) {
 }
 
 export async function creerVehicule(donnees) {
+  await authPrete;
   if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.creeLe = serverTimestamp();
   donnees.creePar = window.UTILISATEUR || "";
@@ -82,6 +87,7 @@ export async function creerVehicule(donnees) {
 // saisi directement dans Stock, importé en masse, ou fait entrer depuis
 // la pré-liste elle-même.
 export async function retirerArrivageParChassis(chassis) {
+  await authPrete;
   if (!chassis) return;
   const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
@@ -97,6 +103,7 @@ export async function retirerArrivageParChassis(chassis) {
 // ou une quantité augmentée le décompte). Prévient si le stock devient
 // insuffisant (quantité demandée supérieure à ce qui est disponible).
 export async function ajusterStockEquipements(ancien, nouveau) {
+  await authPrete;
   const noms = new Set([...Object.keys(ancien || {}), ...Object.keys(nouveau || {})]);
   if (noms.size === 0) return;
   const snap = await getDocs(equipementsRef);
@@ -123,6 +130,7 @@ export async function ajusterStockEquipements(ancien, nouveau) {
 }
 
 export async function majVehicule(id, donnees) {
+  await authPrete;
   if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   const existant = await getDoc(doc(db, "vehicules", id));
   const donneesActuelles = existant.exists() ? existant.data() : {};
@@ -151,6 +159,7 @@ export async function majVehicule(id, donnees) {
 // l'information, on l'archive dans vehicules_archives (avec toutes ses
 // infos + qui l'a sorti et quand) avant de le retirer du stock actif.
 export async function supprimerVehicule(vehicule) {
+  await authPrete;
   await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
   const { id, ...donnees } = vehicule;
   await addDoc(archivesRef, {
@@ -162,7 +171,8 @@ export async function supprimerVehicule(vehicule) {
   await enregistrerHistorique("Sortie du parc", vehicule);
 }
 
-export function ecouterArchives(callback) {
+export async function ecouterArchives(callback) {
+  await authPrete;
   const q = query(archivesRef, orderBy("sortiLe", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -171,6 +181,7 @@ export function ecouterArchives(callback) {
 
 // Remet un véhicule archivé de nouveau dans le stock actif.
 export async function restaurerArchive(archive) {
+  await authPrete;
   const { id, sortiLe, sortiPar, ...donnees } = archive;
   await creerVehicule(donnees);
   await deleteDoc(doc(db, "vehicules_archives", id));
@@ -193,6 +204,7 @@ const LIBELLE_PAR_STATUT = {
 };
 
 export async function enregistrerHistorique(action, vehicule) {
+  await authPrete;
   await addDoc(historiqueRef, {
     action,
     chassis: vehicule.chassis || "",
@@ -207,7 +219,8 @@ export async function enregistrerHistorique(action, vehicule) {
   });
 }
 
-export function ecouterHistorique(callback) {
+export async function ecouterHistorique(callback) {
+  await authPrete;
   const q = query(historiqueRef, orderBy("horodatage", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => d.data()));
@@ -215,6 +228,7 @@ export function ecouterHistorique(callback) {
 }
 
 export async function chargerHistorique() {
+  await authPrete;
   const q = query(historiqueRef, orderBy("horodatage", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data());
@@ -224,7 +238,8 @@ export async function chargerHistorique() {
 // Prochain arrivage — pré-liste des véhicules pas encore en stock
 // ---------------------------------------------------------------
 
-export function ecouterArrivages(callback) {
+export async function ecouterArrivages(callback) {
+  await authPrete;
   const q = query(arrivagesRef, orderBy("dateArriveePrevue", "asc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -232,11 +247,13 @@ export function ecouterArrivages(callback) {
 }
 
 export async function getArrivage(id) {
+  await authPrete;
   const snap = await getDoc(doc(db, "prochains_arrivages", id));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
 export async function creerArrivage(donnees) {
+  await authPrete;
   if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.creeLe = serverTimestamp();
   donnees.creePar = window.UTILISATEUR || "";
@@ -244,16 +261,19 @@ export async function creerArrivage(donnees) {
 }
 
 export async function majArrivage(id, donnees) {
+  await authPrete;
   if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
   donnees.misAJour = serverTimestamp();
   await updateDoc(doc(db, "prochains_arrivages", id), donnees);
 }
 
 export async function supprimerArrivage(id) {
+  await authPrete;
   await deleteDoc(doc(db, "prochains_arrivages", id));
 }
 
 export async function arrivageChassisExisteDeja(chassis, excludeId) {
+  await authPrete;
   if (!chassis) return false;
   const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
@@ -275,6 +295,7 @@ export async function arrivageChassisExisteDeja(chassis, excludeId) {
 // ---------------------------------------------------------------
 
 export async function chassisConnusExistants() {
+  await authPrete;
   const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
   const set = new Set();
   vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); });
@@ -283,6 +304,7 @@ export async function chassisConnusExistants() {
 }
 
 export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
+  await authPrete;
   const existants = await chassisConnusExistants();
   const vuDansFichier = new Set();
   let n = 0, ignorees = 0, doublons = 0;
@@ -331,6 +353,7 @@ export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
 // gérés à l'import (toujours vides), donc pas d'ajustement de stock équipements
 // nécessaire ici.
 export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
+  await authPrete;
   const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
   const existants = new Set();
   vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) existants.add(c); });
@@ -392,6 +415,7 @@ export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
 // crée le véhicule (avec la vraie date d'entrée donnée par l'utilisateur)
 // puis retire l'entrée de la pré-liste.
 export async function entrerArrivageEnStock(arrivage, dateEntreeReelle) {
+  await authPrete;
   const { id, dateArriveePrevue, ...donnees } = arrivage;
   donnees.dateEntree = dateEntreeReelle;
   donnees.statut = "stock";

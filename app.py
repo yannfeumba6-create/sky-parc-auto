@@ -10,13 +10,48 @@ magasin — ce n'est pas ce qui a été demandé ici).
 """
 
 import os
+import json
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+
+import firebase_admin
+from firebase_admin import credentials as fb_credentials, auth as fb_auth
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-moi-en-production")
 
 APP_PASSWORD = "715525"
+
+# ---------------------------------------------------------------------------
+# Firebase Admin — sert uniquement à délivrer un jeton d'authentification
+# Firebase au navigateur une fois le mot de passe validé. Sans ça, Firestore
+# voit chaque requête comme anonyme et la refuse ("Missing or insufficient
+# permissions") dès que les règles de sécurité exigent une authentification.
+#
+# Nécessite la variable d'environnement FIREBASE_SERVICE_ACCOUNT_JSON,
+# contenant le JSON complet de la clé de compte de service Firebase
+# (Console Firebase → Paramètres du projet → Comptes de service →
+# Générer une nouvelle clé privée → copier tout le contenu du fichier
+# .json téléchargé dans cette variable d'environnement).
+# ---------------------------------------------------------------------------
+
+_firebase_admin_app = None
+
+
+def _get_firebase_admin_app():
+    global _firebase_admin_app
+    if _firebase_admin_app is not None:
+        return _firebase_admin_app
+    raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        return None
+    try:
+        cred = fb_credentials.Certificate(json.loads(raw))
+        _firebase_admin_app = firebase_admin.initialize_app(cred)
+    except Exception as e:
+        print(f"[Firebase Admin] Échec d'initialisation : {e}")
+        _firebase_admin_app = None
+    return _firebase_admin_app
 
 # ---------------------------------------------------------------------------
 # Référentiels
@@ -198,6 +233,28 @@ def referentiels():
         "statuts": STATUTS,
         "equipements": EQUIPEMENTS_REFERENCE,
     })
+
+
+@app.route("/api/firebase-token")
+@login_required
+def firebase_token():
+    fb_app = _get_firebase_admin_app()
+    if fb_app is None:
+        return jsonify({
+            "error": "Firebase Admin non configuré côté serveur : la variable "
+                     "d'environnement FIREBASE_SERVICE_ACCOUNT_JSON est manquante ou invalide."
+        }), 500
+
+    nom = session.get("nom") or "utilisateur"
+    uid = "sky-parc-" + ("".join(c for c in nom.lower() if c.isalnum()) or "utilisateur")
+    try:
+        token = fb_auth.create_custom_token(uid)
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+    except Exception as e:
+        return jsonify({"error": f"Échec de génération du jeton Firebase : {e}"}), 500
+
+    return jsonify({"token": token})
 
 
 @app.route("/manifest.json")
