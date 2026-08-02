@@ -685,7 +685,7 @@ function recalculerEtAfficher() {
 }
 
 function estLigneValide(d) {
-  return !!(d.chassis && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE]);
+  return !!(d.chassis && d.marque && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE]);
 }
 
 function afficherMapping() {

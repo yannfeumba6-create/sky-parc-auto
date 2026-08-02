@@ -326,7 +326,7 @@ export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateArriveePrevue) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;
@@ -379,7 +379,7 @@ export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateEntree) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateEntree) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;
