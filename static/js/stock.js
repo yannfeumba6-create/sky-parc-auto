@@ -1,7 +1,7 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
-  importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique,
+  importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond,
 } from "./data.js";
 
 let _vehicules = [];
@@ -100,8 +100,8 @@ function vehiculesFiltres() {
   const periode = document.getElementById("f-periode").value;
 
   return _vehicules.filter((v) => {
-    if (marque && v.marque !== marque) return false;
-    if (modele && v.modele !== modele) return false;
+    if (marque && !marqueCorrespond(v.marque, marque)) return false;
+    if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
     if (date && v.dateEntree !== date) return false;
     if (!dansPeriode(v.dateEntree, periode)) return false;

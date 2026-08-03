@@ -1,4 +1,4 @@
-import { ecouterArchives, restaurerArchive, chassis6, STATUT_LABEL } from "./data.js";
+import { ecouterArchives, restaurerArchive, chassis6, STATUT_LABEL, marqueCorrespond } from "./data.js";
 
 let _archives = [];
 
@@ -6,7 +6,7 @@ function filtres() {
   const recherche = document.getElementById("f-recherche").value.trim().toLowerCase();
   const marque = document.getElementById("f-marque").value;
   return _archives.filter((v) => {
-    if (marque && v.marque !== marque) return false;
+    if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (recherche) {
       const cible = `${v.chassis || ""} ${v.modele || ""} ${v.client?.nom || ""}`.toLowerCase();
       if (!cible.includes(recherche)) return false;

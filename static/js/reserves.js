@@ -1,4 +1,4 @@
-import { ecouterVehicules, majVehicule, chassis6 } from "./data.js";
+import { ecouterVehicules, majVehicule, chassis6, marqueCorrespond } from "./data.js";
 
 let _tous = [];
 
@@ -13,7 +13,7 @@ function filtreCommun(liste) {
   const marque = document.getElementById("f-marque").value;
   const emplacement = document.getElementById("f-emplacement").value;
   return liste.filter((v) => {
-    if (marque && v.marque !== marque) return false;
+    if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
     if (recherche) {
       const cible = `${v.chassis || ""} ${v.modele || ""}`.toLowerCase();

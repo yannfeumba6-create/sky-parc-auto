@@ -2,6 +2,7 @@ import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
   entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
   importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
+  marqueCorrespond, modeleCorrespond,
 } from "./data.js";
 
 let _arrivages = [];
@@ -95,8 +96,8 @@ function arrivagesFiltres() {
   const periode = document.getElementById("f-periode").value;
 
   return _arrivages.filter((v) => {
-    if (marque && v.marque !== marque) return false;
-    if (modele && v.modele !== modele) return false;
+    if (marque && !marqueCorrespond(v.marque, marque)) return false;
+    if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
     if (date && v.dateArriveePrevue !== date) return false;
     if (!dansPeriode(v.dateArriveePrevue, periode)) return false;

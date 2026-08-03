@@ -1,4 +1,4 @@
-import { ecouterVehicules, ecouterHistorique, MODELES_PAR_MARQUE } from "./data.js";
+import { ecouterVehicules, ecouterHistorique, MODELES_PAR_MARQUE, marqueCorrespond, modeleCorrespond } from "./data.js";
 
 const MOIS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 const GROUPES = ["flux", "dommages", "top10", "ventes"];
@@ -55,8 +55,8 @@ function filtrer(liste, prefix) {
   const modele = document.getElementById(`${prefix}-modele`).value;
   const emplacement = document.getElementById(`${prefix}-emplacement`).value;
   return liste.filter((v) =>
-    (!marque || v.marque === marque) &&
-    (!modele || v.modele === modele) &&
+    (!marque || marqueCorrespond(v.marque, marque)) &&
+    (!modele || modeleCorrespond(v.marque, v.modele, modele)) &&
     (!emplacement || v.emplacement === emplacement)
   );
 }
@@ -127,7 +127,7 @@ function rendreFlux() {
 function rendreDommages() {
   const liste = filtrer(_vehicules, "dommages").filter((v) => v.statut === "endommage");
   const marques = window.MARQUES || [];
-  const data = marques.map((m) => liste.filter((v) => v.marque === m).length);
+  const data = marques.map((m) => liste.filter((v) => marqueCorrespond(v.marque, m)).length);
   const tc = couleurTexte();
   const ctx = document.getElementById("chart-dommages").getContext("2d");
   if (_charts.dommages) _charts.dommages.destroy();
@@ -247,7 +247,7 @@ function rendreTypes() {
 function rendreDelai() {
   const marques = window.MARQUES || [];
   const moyennes = marques.map((m) => {
-    const vendus = _vehicules.filter((v) => v.marque === m && v.statut === "vendu" && v.dateEntree && v.client?.dateAchat);
+    const vendus = _vehicules.filter((v) => marqueCorrespond(v.marque, m) && v.statut === "vendu" && v.dateEntree && v.client?.dateAchat);
     if (vendus.length === 0) return 0;
     const total = vendus.reduce((s, v) => {
       const entree = toDate(v.dateEntree);

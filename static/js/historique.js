@@ -1,4 +1,4 @@
-import { ecouterHistorique } from "./data.js";
+import { ecouterHistorique, marqueCorrespond } from "./data.js";
 
 let _historique = [];
 
@@ -14,7 +14,7 @@ function filtres() {
   const marque = document.getElementById("f-marque").value;
   const action = document.getElementById("f-action").value;
   return _historique.filter((h) => {
-    if (marque && h.marque !== marque) return false;
+    if (marque && !marqueCorrespond(h.marque, marque)) return false;
     if (action && h.action !== action) return false;
     if (recherche) {
       const cible = `${h.chassis || ""} ${h.modele || ""} ${h.utilisateur || ""}`.toLowerCase();

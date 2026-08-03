@@ -110,6 +110,23 @@ export function normaliserModele(marque, modeleBrut, precis) {
   return String(modeleBrut || "").trim();
 }
 
+// À utiliser dans TOUS les filtres de l'appli (Arrivages, Stock, Réservés,
+// Vendus, Archives, Historique, Tableau de bord) à la place d'une simple
+// comparaison "===". Insensible à la casse/espaces/accents, ET regroupe
+// automatiquement les variantes d'une même famille (ex. "X50 Luxury", "X50
+// Comfort", "X50 M", "X50 Auto"…) sous le même filtre "X50" — y compris pour
+// des véhicules déjà enregistrés avant la normalisation à l'import.
+export function marqueCorrespond(marqueVehicule, marqueFiltre) {
+  if (!marqueFiltre) return true;
+  return normaliserMarque(marqueVehicule) === normaliserMarque(marqueFiltre);
+}
+
+export function modeleCorrespond(marqueVehicule, modeleVehicule, modeleFiltre) {
+  if (!modeleFiltre) return true;
+  const marque = normaliserMarque(marqueVehicule);
+  return normaliserModele(marque, modeleVehicule, false) === normaliserModele(marque, modeleFiltre, false);
+}
+
 export function chassis6(chassis) {
   if (!chassis) return "—";
   const c = String(chassis).trim();

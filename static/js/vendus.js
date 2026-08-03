@@ -1,4 +1,4 @@
-import { ecouterVehicules, chassis6 } from "./data.js";
+import { ecouterVehicules, chassis6, marqueCorrespond } from "./data.js";
 
 let _vendus = [];
 
@@ -26,7 +26,7 @@ function filtres() {
   const emplacement = document.getElementById("f-emplacement").value;
   const periode = document.getElementById("f-periode").value;
   return _vendus.filter((v) => {
-    if (marque && v.marque !== marque) return false;
+    if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
     if (!dansPeriode(v.client?.dateAchat, periode)) return false;
     if (recherche) {
