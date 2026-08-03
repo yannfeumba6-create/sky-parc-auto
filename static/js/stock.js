@@ -1,7 +1,7 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
-  importerVehiculesEnMasse,
+  importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique,
 } from "./data.js";
 
 let _vehicules = [];
@@ -558,11 +558,11 @@ function construireDonnees(lignesDonnees, mappingParColonne) {
       const idx = mappingParColonne.indexOf(champ);
       return idx === -1 ? "" : (l[idx] || "").trim();
     };
-    const marque = val("marque");
+    const marque = normaliserMarque(val("marque"));
     return {
       chassis: val("chassis"),
       marque,
-      modele: val("modele"),
+      modele: normaliserModele(marque, val("modele"), true),
       couleurExt: val("couleurExt"),
       couleurInt: val("couleurInt"),
       [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
@@ -685,7 +685,7 @@ function recalculerEtAfficher() {
 }
 
 function estLigneValide(d) {
-  return !!(d.chassis && d.marque && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE]);
+  return !!(d.chassis && d.marque && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE] && !estModeleGenerique(d.marque, d.modele));
 }
 
 function afficherMapping() {

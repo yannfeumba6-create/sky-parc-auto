@@ -15,6 +15,85 @@ export const MODELES_PAR_MARQUE = {
   "Howo Sinotruk": ["Howo TX380"],
 };
 
+// Familles de modèles ayant plusieurs variantes de boîte de vitesses
+// (Manuelle / Automatique) que les fournisseurs ne précisent JAMAIS sur
+// leurs documents d'arrivage — seule la réception physique du véhicule
+// permet de savoir laquelle c'est. Le nom de famille (ex. "X50") est donc
+// un modèle valide à l'arrivage, en attendant d'être précisé à l'entrée
+// en stock.
+export const FAMILLES_MODELES = {
+  "Jetour": { "X50": ["X50 M", "X50 Auto"] },
+};
+
+function pliAccentsCasse(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+// Ramène une marque écrite librement (import CSV/PDF/Excel, casse ou
+// espacement quelconque — ex. "jetour", "JETOUR ") vers l'orthographe
+// exacte utilisée partout ailleurs dans l'appli. Indispensable pour que les
+// filtres (qui comparent une chaîne exacte) retrouvent les véhicules
+// importés — sinon la marque s'affiche correctement mais aucun filtre ne
+// la retrouve jamais.
+export function normaliserMarque(brute) {
+  const n = pliAccentsCasse(brute);
+  const marque = Object.keys(MODELES_PAR_MARQUE).find((m) => pliAccentsCasse(m) === n);
+  return marque || String(brute || "").trim();
+}
+
+// Modèles à proposer pour un ARRIVAGE : les familles à variantes de boîte
+// sont réduites à leur nom générique (ex. "X50" au lieu de "X50 M"/"X50
+// Auto") puisque la variante n'est pas connue à ce stade.
+export function modelesArrivageDisponibles(marque) {
+  const tousLesModeles = MODELES_PAR_MARQUE[marque] || [];
+  const familles = FAMILLES_MODELES[marque] || {};
+  const variantesAExclure = new Set(Object.values(familles).flat());
+  const modeles = tousLesModeles.filter((m) => !variantesAExclure.has(m));
+  return [...Object.keys(familles), ...modeles];
+}
+
+// Un modèle "générique" est le nom de famille sans variante de boîte
+// précisée (ex. "X50") — valide pour un arrivage, mais pas pour une fiche
+// de Stock qui doit connaître la variante exacte.
+export function estModeleGenerique(marque, modele) {
+  return !!(FAMILLES_MODELES[marque] && FAMILLES_MODELES[marque][modele]);
+}
+
+// Ramène un texte de modèle libre (import) vers l'orthographe reconnue.
+// `precis = false` (Arrivages) : une famille à variantes (ex. "X50 Confort",
+// "X50 Luxe Auto"…) est ramenée à son nom générique ("X50"), quoi qu'il y
+// ait écrit après.
+// `precis = true` (Stock) : on tente de deviner la variante exacte à partir
+// de mots-clés ("auto", "manuel"…) présents dans le texte ; si aucun indice
+// n'est trouvé, le nom générique est renvoyé tel quel (la ligne sera alors
+// signalée incomplète dans l'aperçu, à corriger à la main).
+export function normaliserModele(marque, modeleBrut, precis) {
+  const brut = pliAccentsCasse(modeleBrut);
+  if (!brut) return String(modeleBrut || "").trim();
+
+  const tousLesModeles = MODELES_PAR_MARQUE[marque] || [];
+  const exact = tousLesModeles.find((m) => pliAccentsCasse(m) === brut);
+  if (exact) return exact;
+
+  const familles = FAMILLES_MODELES[marque] || {};
+  for (const [base, variantes] of Object.entries(familles)) {
+    const baseKey = pliAccentsCasse(base);
+    if (new RegExp(`\\b${baseKey}\\b`).test(brut)) {
+      if (!precis) return base;
+      const auto = variantes.find((v) => /auto/i.test(v));
+      const manuel = variantes.find((v) => /manuel/i.test(v) || /\bm\b/i.test(v));
+      if (auto && /auto/.test(brut)) return auto;
+      if (manuel && /(manuelle?|\bm\b)/.test(brut)) return manuel;
+      return base;
+    }
+  }
+
+  const partiel = tousLesModeles.find((m) => brut.includes(pliAccentsCasse(m)));
+  if (partiel) return partiel;
+
+  return String(modeleBrut || "").trim();
+}
+
 export function chassis6(chassis) {
   if (!chassis) return "—";
   const c = String(chassis).trim();

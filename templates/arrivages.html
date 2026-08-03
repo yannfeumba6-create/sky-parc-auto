@@ -138,6 +138,25 @@
 </div>
 
 <!-- MODAL — Import -->
+<div class="modal-bg" id="modal-entree-stock">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">ENTRER EN STOCK</div><button class="modal-close" onclick="annulerEntreeStock()">✕</button></div>
+    <div class="modal-body">
+      <div id="es-vehicule-info" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>
+      <div class="form-group"><label>Date d'entrée réelle</label><input type="date" id="es-date"></div>
+      <div class="form-group" id="es-modele-wrap" style="display:none;">
+        <label>Modèle exact (vérifié à la réception)</label>
+        <select id="es-modele-final"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="annulerEntreeStock()">Annuler</button>
+      <button class="btn btn-red" onclick="validerEntreeStock()">Confirmer l'entrée en stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — Import -->
 <div class="modal-bg" id="modal-import">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">IMPORTER DES ARRIVAGES</div><button class="modal-close" onclick="fermerModalImport()">✕</button></div>

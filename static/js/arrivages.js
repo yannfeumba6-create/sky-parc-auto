@@ -1,7 +1,7 @@
 import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
   entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
-  importerArrivagesEnMasse,
+  importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
 } from "./data.js";
 
 let _arrivages = [];
@@ -10,7 +10,7 @@ const _selection = new Set();
 window.onMarqueChange = function () {
   const marque = document.getElementById("v-marque").value;
   const sel = document.getElementById("v-modele");
-  const modeles = MODELES_PAR_MARQUE[marque] || [];
+  const modeles = modelesArrivageDisponibles(marque);
   sel.innerHTML = modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
   const typeAuto = typeAutomatique(marque);
   if (typeAuto) document.getElementById("v-type").value = typeAuto;
@@ -110,7 +110,7 @@ function arrivagesFiltres() {
 
 function rafraichirFiltreModeles() {
   const marque = document.getElementById("f-marque").value;
-  const modeles = marque ? (MODELES_PAR_MARQUE[marque] || []) : Object.values(MODELES_PAR_MARQUE).flat();
+  const modeles = marque ? modelesArrivageDisponibles(marque) : Object.keys(MODELES_PAR_MARQUE).flatMap(modelesArrivageDisponibles);
   const sel = document.getElementById("f-modele");
   const valActuelle = sel.value;
   sel.innerHTML = `<option value="">Tous</option>` + modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
@@ -191,16 +191,82 @@ window.viderSelection = function () {
   rendreTableau();
 };
 
+// ---------------------------------------------------------------
+// Entrée en stock — demande la date réelle, et si le modèle de l'arrivage
+// est générique (ex. "X50", sans boîte précisée), impose de choisir la
+// variante exacte (Manuelle/Auto) vérifiée à la réception physique du
+// véhicule, avant de créer la fiche de Stock.
+// ---------------------------------------------------------------
+
+let _resoudreEntreeStock = null;
+
+function ouvrirModalEntreeStock(v) {
+  return new Promise((resolve) => {
+    document.getElementById("es-vehicule-info").textContent = `${v.marque || ""} ${v.modele || ""} — Châssis ${chassis6(v.chassis)}`;
+    document.getElementById("es-date").value = new Date().toISOString().slice(0, 10);
+
+    const generique = estModeleGenerique(v.marque, v.modele);
+    const wrap = document.getElementById("es-modele-wrap");
+    const sel = document.getElementById("es-modele-final");
+    if (generique) {
+      const variantes = (FAMILLES_MODELES[v.marque] || {})[v.modele] || [];
+      sel.innerHTML = `<option value="">— Choisir —</option>` + variantes.map((m) => `<option value="${m}">${m}</option>`).join("");
+      wrap.style.display = "block";
+    } else {
+      wrap.style.display = "none";
+    }
+
+    _resoudreEntreeStock = resolve;
+    openModal("modal-entree-stock");
+  });
+}
+
+window.validerEntreeStock = function () {
+  const date = document.getElementById("es-date").value;
+  if (!date) { toast("Choisis une date d'entrée", "terr"); return; }
+
+  const wrap = document.getElementById("es-modele-wrap");
+  let modeleFinal = null;
+  if (wrap.style.display !== "none") {
+    modeleFinal = document.getElementById("es-modele-final").value;
+    if (!modeleFinal) { toast("Choisis le modèle exact (Manuelle ou Auto) vérifié à la réception", "terr"); return; }
+  }
+
+  closeModal("modal-entree-stock");
+  const resolve = _resoudreEntreeStock;
+  _resoudreEntreeStock = null;
+  if (resolve) resolve({ date, modeleFinal });
+};
+
+window.annulerEntreeStock = function () {
+  closeModal("modal-entree-stock");
+  const resolve = _resoudreEntreeStock;
+  _resoudreEntreeStock = null;
+  if (resolve) resolve(null);
+};
+
 window.entrerSelectionEnStock = async function () {
   const date = document.getElementById("date-entree-groupee").value;
   if (!date) { toast("Choisis une date d'entrée", "terr"); return; }
   const ids = [..._selection];
   if (ids.length === 0) return;
+
+  let nOk = 0, nAnnules = 0;
   for (const id of ids) {
     const v = _arrivages.find((x) => x.id === id);
-    if (v) await entrerArrivageEnStock(v, date);
+    if (!v) continue;
+    if (estModeleGenerique(v.marque, v.modele)) {
+      // Boîte à préciser au cas par cas — on ne peut pas deviner pour tout
+      // le lot en une fois, une petite fenêtre s'ouvre pour ce véhicule.
+      const resultat = await ouvrirModalEntreeStock(v);
+      if (!resultat) { nAnnules++; continue; }
+      await entrerArrivageEnStock({ ...v, modele: resultat.modeleFinal }, resultat.date);
+    } else {
+      await entrerArrivageEnStock(v, date);
+    }
+    nOk++;
   }
-  toast(`${ids.length} véhicule(s) entré(s) en stock`);
+  toast(`${nOk} véhicule(s) entré(s) en stock${nAnnules ? `, ${nAnnules} laissé(s) en attente (variante non précisée)` : ""}`);
   _selection.clear();
 };
 
@@ -311,9 +377,10 @@ document.addEventListener("click", async (e) => {
   if (action === "entrer") {
     const v = _arrivages.find((x) => x.id === id);
     if (!v) return;
-    const date = prompt("Date d'entrée réelle dans le stock (AAAA-MM-JJ) :", new Date().toISOString().slice(0, 10));
-    if (date === null) return;
-    await entrerArrivageEnStock(v, date.trim() || new Date().toISOString().slice(0, 10));
+    const resultat = await ouvrirModalEntreeStock(v);
+    if (!resultat) return;
+    const arrivageAEnvoyer = resultat.modeleFinal ? { ...v, modele: resultat.modeleFinal } : v;
+    await entrerArrivageEnStock(arrivageAEnvoyer, resultat.date);
     toast("Véhicule entré dans le Stock véhicule");
   }
 
@@ -560,11 +627,11 @@ function construireDonnees(lignesDonnees, mappingParColonne) {
       const idx = mappingParColonne.indexOf(champ);
       return idx === -1 ? "" : (l[idx] || "").trim();
     };
-    const marque = val("marque");
+    const marque = normaliserMarque(val("marque"));
     return {
       chassis: val("chassis"),
       marque,
-      modele: val("modele"),
+      modele: normaliserModele(marque, val("modele"), false),
       couleurExt: val("couleurExt"),
       couleurInt: val("couleurInt"),
       [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
