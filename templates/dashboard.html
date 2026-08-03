@@ -14,8 +14,6 @@
 
 <div class="kpi-row">
   <div class="kpi-box"><div class="kpi-val" id="kpi-parc">—</div><div class="kpi-lbl">Véhicules dans le parc</div></div>
-  <div class="kpi-box"><div class="kpi-val" style="color:var(--orange)" id="kpi-reserve">—</div><div class="kpi-lbl">Réservés</div></div>
-  <div class="kpi-box"><div class="kpi-val" style="color:var(--blue)" id="kpi-vendu">—</div><div class="kpi-lbl">Vendus</div></div>
   <div class="kpi-box"><div class="kpi-val" style="color:var(--red)" id="kpi-endommage">—</div><div class="kpi-lbl">Endommagés</div></div>
   <div class="kpi-box"><div class="kpi-val" style="color:#8e44ad;font-size:20px;" id="kpi-valeur-stock">—</div><div class="kpi-lbl">Valeur totale du stock</div></div>
 </div>
@@ -38,34 +36,10 @@
 
 <div class="card">
   <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-    <div class="card-title">Top 10 <span>clients</span> — nombre de véhicules</div>
-    {{ filtres('top10') }}
-  </div>
-  <div style="padding:14px 18px" id="top10-list">Chargement…</div>
-</div>
-
-<div class="card">
-  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-    <div class="card-title">Évolution des <span>ventes</span> sur l'année</div>
-    {{ filtres('ventes') }}
-  </div>
-  <div style="padding:14px;height:220px"><canvas id="chart-ventes"></canvas></div>
-</div>
-
-<div class="card">
-  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
     <div class="card-title">Répartition du parc par <span>type</span></div>
     <button class="btn btn-ghost btn-sm" data-download="types" title="Télécharger en image">⬇ Image</button>
   </div>
   <div style="padding:14px;height:220px"><canvas id="chart-types"></canvas></div>
-</div>
-
-<div class="card">
-  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-    <div class="card-title">Délai moyen de <span>vente</span> par marque (jours)</div>
-    <button class="btn btn-ghost btn-sm" data-download="delai" title="Télécharger en image">⬇ Image</button>
-  </div>
-  <div style="padding:14px;height:220px"><canvas id="chart-delai"></canvas></div>
 </div>
 
 {% endblock %}

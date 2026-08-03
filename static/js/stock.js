@@ -151,8 +151,6 @@ function ligneTableau(v) {
       <td>${esc(v.dateEntree) || "—"}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" data-action="modifier" data-id="${v.id}">✎</button>
-        ${v.statut === "stock" ? `<button class="btn btn-ghost btn-sm" data-action="reserver" data-id="${v.id}">Réserver</button>` : ""}
-        ${v.statut !== "vendu" ? `<button class="btn btn-ghost btn-sm" data-action="vendre" data-id="${v.id}">Vendre</button>` : ""}
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
         <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie</button>
@@ -220,17 +218,10 @@ window.exporterSelectionCSV = function () {
   exportCSV(`selection_stock_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 };
 
-window.sortirSelectionDuParc = async function () {
+window.sortirSelectionDuParc = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-  if (!confirm(`Sortir ${ids.length} véhicule(s) du parc ? Ils seront archivés (consultables dans Véhicules archivés) et retirés du Stock véhicule.`)) return;
-  let n = 0;
-  for (const id of ids) {
-    const v = _vehicules.find((x) => x.id === id);
-    if (v) { await supprimerVehicule(v); n++; }
-  }
-  toast(`${n} véhicule(s) sorti(s) du parc`);
-  _selection.clear();
+  ouvrirModalSortieBulk(ids);
 };
 
 // ---------------------------------------------------------------
@@ -239,9 +230,7 @@ window.sortirSelectionDuParc = async function () {
 
 window.onStatutChange = function () {
   const statut = document.getElementById("v-statut").value;
-  document.getElementById("section-client").style.display = statut === "vendu" ? "block" : "none";
   document.getElementById("section-dommages").style.display = statut === "endommage" ? "block" : "none";
-  document.getElementById("g-dateSortie").style.display = (statut === "vendu") ? "flex" : "none";
 };
 
 function viderFormulaire() {
@@ -271,11 +260,7 @@ async function ouvrirEdition(id, statutForce) {
   set("v-annee", v.annee); set("v-couleurExt", v.couleurExt); set("v-couleurInt", v.couleurInt);
   set("v-emplacement", v.emplacement); set("v-statut", statutForce || v.statut);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
-  set("v-dateEntree", v.dateEntree); set("v-dateSortie", v.dateSortie);
-  if (v.client) {
-    set("v-clientNom", v.client.nom); set("v-clientContact", v.client.contact);
-    set("v-dateAchat", v.client.dateAchat); set("v-modePaiement", v.client.modePaiement); set("v-vendeur", v.client.vendeur);
-  }
+  set("v-dateEntree", v.dateEntree);
   if (v.piecesEndommagees) document.getElementById("v-pieces-endommagees").value = v.piecesEndommagees;
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
@@ -317,7 +302,6 @@ window.enregistrerVehicule = async function () {
     prix: Number(document.getElementById("v-prix").value) || null,
     kilometrage: Number(document.getElementById("v-kilometrage").value) || null,
     dateEntree: document.getElementById("v-dateEntree").value || null,
-    dateSortie: document.getElementById("v-dateSortie").value || null,
     equipements: lireEquipements(),
   };
 
@@ -328,15 +312,6 @@ window.enregistrerVehicule = async function () {
     return;
   }
 
-  if (statut === "vendu") {
-    donnees.client = {
-      nom: document.getElementById("v-clientNom").value.trim(),
-      contact: document.getElementById("v-clientContact").value.trim(),
-      dateAchat: document.getElementById("v-dateAchat").value || null,
-      modePaiement: document.getElementById("v-modePaiement").value.trim(),
-      vendeur: document.getElementById("v-vendeur").value.trim(),
-    };
-  }
   if (statut === "endommage") {
     donnees.piecesEndommagees = document.getElementById("v-pieces-endommagees").value.trim();
   }
@@ -361,11 +336,6 @@ document.addEventListener("click", async (e) => {
   const { action, id } = btn.dataset;
 
   if (action === "modifier") return ouvrirEdition(id);
-  if (action === "vendre") return ouvrirEdition(id, "vendu");
-  if (action === "reserver") {
-    await majVehicule(id, { statut: "reserve" });
-    toast("Véhicule réservé");
-  }
   if (action === "endommager") {
     const pieces = prompt("Quelles pièces / parties sont endommagées ?");
     if (pieces === null) return;
@@ -373,10 +343,7 @@ document.addEventListener("click", async (e) => {
     toast("Véhicule marqué endommagé");
   }
   if (action === "sortir") {
-    if (!confirm("Confirmer la sortie de ce véhicule du parc ? Il sera archivé (consultable dans Véhicules archivés) et retiré du Stock véhicule.")) return;
-    const v = _vehicules.find((x) => x.id === id);
-    await supprimerVehicule(v);
-    toast("Véhicule sorti du parc");
+    ouvrirModalSortie(id);
   }
   if (action === "historique") {
     const v = _vehicules.find((x) => x.id === id);
@@ -393,6 +360,88 @@ document.addEventListener("click", async (e) => {
     openModal("modal-historique-vehicule");
   }
 });
+
+// ---------------------------------------------------------------
+// Sortie de véhicule du parc — date de sortie, destination et
+// matériel présent obligatoires. Le véhicule est archivé (jamais
+// supprimé) via supprimerVehicule, avec ces informations en plus.
+// ---------------------------------------------------------------
+
+let _sortieCible = null; // { type: "single", id } ou { type: "bulk", ids: [...] }
+
+function remplirEquipGridSortie(vehicule) {
+  const grid = document.getElementById("s-equip-grid");
+  const equipActuels = vehicule.equipements || {};
+  const noms = Array.from(document.querySelectorAll("#equip-grid [data-equip]")).map((cb) => cb.dataset.equip);
+  grid.innerHTML = noms.map((nom) => {
+    const info = equipActuels[nom] || {};
+    const present = !!info.present;
+    const qty = info.quantite !== undefined ? info.quantite : 1;
+    return `
+      <label class="equip-item" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" data-s-equip="${esc(nom)}" ${present ? "checked" : ""}> ${esc(nom)}
+        <input type="number" min="0" value="${esc(qty)}" data-s-equip-qty="${esc(nom)}" style="width:50px;margin-left:auto;">
+      </label>`;
+  }).join("");
+}
+
+function lireEquipementsSortie() {
+  const equipements = {};
+  document.querySelectorAll("#s-equip-grid [data-s-equip]").forEach((cb) => {
+    const nom = cb.dataset.sEquip;
+    const qtyEl = document.querySelector(`#s-equip-grid [data-s-equip-qty="${nom}"]`);
+    equipements[nom] = { present: cb.checked, quantite: qtyEl ? Number(qtyEl.value) || 0 : 0 };
+  });
+  return equipements;
+}
+
+function ouvrirModalSortie(id) {
+  const v = _vehicules.find((x) => x.id === id);
+  if (!v) return;
+  _sortieCible = { type: "single", id };
+  document.getElementById("sortie-modal-title").textContent = `SORTIE DU PARC — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("s-destination").value = "";
+  document.getElementById("s-equip-wrap").style.display = "block";
+  remplirEquipGridSortie(v);
+  openModal("modal-sortie");
+}
+
+function ouvrirModalSortieBulk(ids) {
+  _sortieCible = { type: "bulk", ids };
+  document.getElementById("sortie-modal-title").textContent = `SORTIE DU PARC — ${ids.length} véhicule(s) sélectionné(s)`;
+  document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("s-destination").value = "";
+  document.getElementById("s-equip-wrap").style.display = "none";
+  openModal("modal-sortie");
+}
+
+window.confirmerSortie = async function () {
+  const dateSortie = document.getElementById("s-dateSortie").value;
+  const destination = document.getElementById("s-destination").value;
+  if (!dateSortie) { toast("La date de sortie est obligatoire", "terr"); return; }
+  if (!destination) { toast("La destination est obligatoire", "terr"); return; }
+  if (!_sortieCible) return;
+
+  if (_sortieCible.type === "single") {
+    const v = _vehicules.find((x) => x.id === _sortieCible.id);
+    if (!v) return;
+    const equipements = lireEquipementsSortie();
+    await supprimerVehicule({ ...v, dateSortie, destination, equipements });
+    toast("Véhicule sorti du parc");
+  } else {
+    let n = 0;
+    for (const id of _sortieCible.ids) {
+      const v = _vehicules.find((x) => x.id === id);
+      if (v) { await supprimerVehicule({ ...v, dateSortie, destination }); n++; }
+    }
+    toast(`${n} véhicule(s) sorti(s) du parc`);
+    _selection.clear();
+  }
+
+  closeModal("modal-sortie");
+  _sortieCible = null;
+};
 
 // ---------------------------------------------------------------
 // Export CSV / PDF

@@ -111,27 +111,12 @@
           <div class="form-group"><label>Statut</label>
             <select id="v-statut" onchange="onStatutChange()">
               <option value="stock">En stock</option>
-              <option value="reserve">Réservé</option>
-              <option value="vendu">Vendu</option>
               <option value="endommage">Endommagé</option>
             </select>
           </div>
           <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="v-prix" min="0"></div>
           <div class="form-group"><label>Kilométrage</label><input type="number" id="v-kilometrage" min="0"></div>
           <div class="form-group"><label>Date d'entrée</label><input type="date" id="v-dateEntree"></div>
-          <div class="form-group" id="g-dateSortie" style="display:none;"><label>Date de sortie</label><input type="date" id="v-dateSortie"></div>
-        </div>
-
-        <div id="section-client" style="display:none;">
-          <div class="divider"></div>
-          <div class="section-lbl">Informations client</div>
-          <div class="form-grid">
-            <div class="form-group"><label>Nom du client</label><input type="text" id="v-clientNom"></div>
-            <div class="form-group"><label>Contact</label><input type="text" id="v-clientContact"></div>
-            <div class="form-group"><label>Date d'achat</label><input type="date" id="v-dateAchat"></div>
-            <div class="form-group"><label>Mode de paiement</label><input type="text" id="v-modePaiement"></div>
-            <div class="form-group"><label>Vendeur / agent</label><input type="text" id="v-vendeur"></div>
-          </div>
         </div>
 
         <div id="section-dommages" style="display:none;">
@@ -209,6 +194,38 @@
       </table>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-historique-vehicule')">Fermer</button></div>
+  </div>
+</div>
+
+<!-- MODAL — Sortie de véhicule du parc -->
+<div class="modal-bg" id="modal-sortie">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="sortie-modal-title">SORTIE DU PARC</div><button class="modal-close" onclick="closeModal('modal-sortie')">✕</button></div>
+    <div class="modal-body">
+      <form id="form-sortie">
+        <div class="form-grid">
+          <div class="form-group"><label>Date de sortie *</label><input type="date" id="s-dateSortie" required></div>
+          <div class="form-group">
+            <label>Destination *</label>
+            <select id="s-destination" required>
+              <option value="">— Choisir —</option>
+              <option value="Showroom Douala">Showroom Douala</option>
+              <option value="Showroom Yaoundé">Showroom Yaoundé</option>
+              <option value="Showroom Bafoussam">Showroom Bafoussam</option>
+            </select>
+          </div>
+        </div>
+        <div id="s-equip-wrap" style="display:none;">
+          <div class="divider"></div>
+          <div class="section-lbl">Matériel présent dans le véhicule à la sortie</div>
+          <div class="equip-grid" id="s-equip-grid"></div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sortie')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerSortie()">Confirmer la sortie</button>
+    </div>
   </div>
 </div>
 

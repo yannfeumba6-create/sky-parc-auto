@@ -1,11 +1,12 @@
-import { ecouterVehicules, ecouterHistorique, MODELES_PAR_MARQUE, marqueCorrespond, modeleCorrespond } from "./data.js";
+import { ecouterVehicules, ecouterHistorique, ecouterArchives, MODELES_PAR_MARQUE, marqueCorrespond, modeleCorrespond } from "./data.js";
 
 const MOIS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
-const GROUPES = ["flux", "dommages", "top10", "ventes"];
+const GROUPES = ["flux", "dommages"];
 
 let _vehicules = [];
 let _historique = [];
-const _charts = {}; // { flux: ChartInstance, ventes: ChartInstance, dommages: ChartInstance }
+let _archives = [];
+const _charts = {}; // { flux: ChartInstance, dommages: ChartInstance, types: ChartInstance }
 
 function couleurTexte() {
   return document.documentElement.getAttribute("data-theme") === "dark" ? "#ccc" : "#555";
@@ -67,8 +68,6 @@ function filtrer(liste, prefix) {
 
 function rendreKpis() {
   document.getElementById("kpi-parc").textContent = _vehicules.filter((v) => v.statut === "stock").length;
-  document.getElementById("kpi-reserve").textContent = _vehicules.filter((v) => v.statut === "reserve").length;
-  document.getElementById("kpi-vendu").textContent = _vehicules.filter((v) => v.statut === "vendu").length;
   document.getElementById("kpi-endommage").textContent = _vehicules.filter((v) => v.statut === "endommage").length;
   const valeur = _vehicules.filter((v) => v.statut === "stock").reduce((s, v) => s + (Number(v.prix) || 0), 0);
   document.getElementById("kpi-valeur-stock").textContent = valeur.toLocaleString("fr-FR") + " F";
@@ -79,12 +78,12 @@ function rendreKpis() {
 // ---------------------------------------------------------------
 
 // Le nombre d'entrées/sorties par mois est calculé à partir des DATES
-// SAISIES sur les fiches (dateEntree, client.dateAchat) — pas de la date
-// réelle à laquelle l'action a été enregistrée dans l'appli. Un véhicule
-// importé en août mais dont la fiche indique une entrée en juillet compte
-// donc bien pour juillet, pas pour août.
+// SAISIES sur les fiches (dateEntree) et des dates de sortie du parc
+// (dateSortie, saisie obligatoirement lors de la sortie d'un véhicule),
+// pas de la date réelle à laquelle l'action a été enregistrée dans l'appli.
 function rendreFlux() {
   const liste = filtrer(_vehicules, "flux");
+  const archives = filtrer(_archives, "flux");
   const now = new Date();
   const entrees = new Array(12).fill(0);
   const sorties = new Array(12).fill(0);
@@ -101,10 +100,10 @@ function rendreFlux() {
   liste.forEach((v) => {
     const idxEntree = indexMois(v.dateEntree);
     if (idxEntree !== -1) entrees[idxEntree]++;
-    if (v.statut === "vendu" && v.client && v.client.dateAchat) {
-      const idxSortie = indexMois(v.client.dateAchat);
-      if (idxSortie !== -1) sorties[idxSortie]++;
-    }
+  });
+  archives.forEach((v) => {
+    const idxSortie = indexMois(v.dateSortie);
+    if (idxSortie !== -1) sorties[idxSortie]++;
   });
 
   const tc = couleurTexte();
@@ -116,7 +115,7 @@ function rendreFlux() {
       labels,
       datasets: [
         { label: "Entrées", data: entrees, backgroundColor: "rgba(39,174,96,.75)", borderRadius: 5 },
-        { label: "Sorties (ventes)", data: sorties, backgroundColor: "rgba(192,57,43,.75)", borderRadius: 5 },
+        { label: "Sorties du parc", data: sorties, backgroundColor: "rgba(192,57,43,.75)", borderRadius: 5 },
       ],
     },
     options: {
@@ -159,77 +158,6 @@ function rendreDommages() {
 }
 
 // ---------------------------------------------------------------
-// Top 10 clients
-// ---------------------------------------------------------------
-
-function rendreTop10() {
-  const liste = filtrer(_vehicules, "top10");
-  const parClient = {};
-  liste.filter((v) => v.statut === "vendu" && v.client && v.client.nom).forEach((v) => {
-    const nom = v.client.nom.trim();
-    parClient[nom] = (parClient[nom] || 0) + 1;
-  });
-  const top10 = Object.entries(parClient).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const el = document.getElementById("top10-list");
-  if (top10.length === 0) {
-    el.innerHTML = `<div class="empty-state" style="padding:20px;color:var(--muted);text-align:center;">Aucune vente enregistrée pour l'instant</div>`;
-  } else {
-    el.innerHTML = top10.map(([nom, n], i) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
-        <span><b style="font-family:var(--font-title);color:var(--red);margin-right:8px;">${i + 1}</b>${esc(nom)}</span>
-        <span class="tag">${n} véhicule${n > 1 ? "s" : ""}</span>
-      </div>`).join("");
-  }
-}
-
-// ---------------------------------------------------------------
-// Évolution des ventes
-// ---------------------------------------------------------------
-
-function rendreVentes() {
-  const liste = filtrer(_vehicules, "ventes");
-  const now = new Date();
-  const ventesParMois = new Array(12).fill(0);
-  liste.filter((v) => v.statut === "vendu" && v.client && v.client.dateAchat).forEach((v) => {
-    const d = toDate(v.client.dateAchat);
-    if (d && d.getFullYear() === now.getFullYear()) ventesParMois[d.getMonth()]++;
-  });
-  const tc = couleurTexte();
-  const ctx = document.getElementById("chart-ventes").getContext("2d");
-  if (_charts.ventes) _charts.ventes.destroy();
-  _charts.ventes = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: MOIS,
-      datasets: [{
-        label: "Ventes", data: ventesParMois,
-        borderColor: "#c0392b", backgroundColor: "rgba(192,57,43,.15)",
-        fill: true, tension: 0.35, pointRadius: 3,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: tc, font: { size: 9 } } },
-        y: { ticks: { color: tc, font: { size: 9 }, precision: 0 }, beginAtZero: true },
-      },
-    },
-  });
-}
-
-function rendreTout() {
-  rendreKpis();
-  rendreFlux();
-  rendreDommages();
-  rendreTop10();
-  rendreVentes();
-  rendreTypes();
-  rendreDelai();
-}
-window.updateCharts = rendreTout;
-
-// ---------------------------------------------------------------
 // Répartition du parc par type
 // ---------------------------------------------------------------
 
@@ -251,40 +179,6 @@ function rendreTypes() {
 }
 
 // ---------------------------------------------------------------
-// Délai moyen de vente par marque
-// ---------------------------------------------------------------
-
-function rendreDelai() {
-  const marques = window.MARQUES || [];
-  const moyennes = marques.map((m) => {
-    const vendus = _vehicules.filter((v) => marqueCorrespond(v.marque, m) && v.statut === "vendu" && v.dateEntree && v.client?.dateAchat);
-    if (vendus.length === 0) return 0;
-    const total = vendus.reduce((s, v) => {
-      const entree = toDate(v.dateEntree);
-      const achat = toDate(v.client.dateAchat);
-      if (!entree || !achat) return s;
-      return s + Math.max(0, Math.round((achat - entree) / (1000 * 60 * 60 * 24)));
-    }, 0);
-    return Math.round(total / vendus.length);
-  });
-  const tc = couleurTexte();
-  const ctx = document.getElementById("chart-delai").getContext("2d");
-  if (_charts.delai) _charts.delai.destroy();
-  _charts.delai = new Chart(ctx, {
-    type: "bar",
-    data: { labels: marques, datasets: [{ label: "Jours", data: moyennes, backgroundColor: "rgba(41,128,185,.75)", borderRadius: 5 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: tc, font: { size: 9 } } },
-        y: { ticks: { color: tc, font: { size: 9 }, precision: 0 }, beginAtZero: true },
-      },
-    },
-  });
-}
-
-// ---------------------------------------------------------------
 // Téléchargement des graphiques en image
 // ---------------------------------------------------------------
 
@@ -300,23 +194,20 @@ document.addEventListener("click", (e) => {
     a.download = `${prefix}_${new Date().toISOString().slice(0, 10)}.png`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     toast("Graphique téléchargé");
-    return;
-  }
-
-  if (prefix === "top10" && window.html2canvas) {
-    const el = document.getElementById("top10-list");
-    window.html2canvas(el, { backgroundColor: document.documentElement.getAttribute("data-theme") === "dark" ? "#1b1e23" : "#ffffff" }).then((canvas) => {
-      const a = document.createElement("a");
-      a.href = canvas.toDataURL("image/png");
-      a.download = `top10_clients_${new Date().toISOString().slice(0, 10)}.png`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      toast("Image téléchargée");
-    });
   }
 });
+
+function rendreTout() {
+  rendreKpis();
+  rendreFlux();
+  rendreDommages();
+  rendreTypes();
+}
+window.updateCharts = rendreTout;
 
 document.addEventListener("DOMContentLoaded", () => {
   peuplerFiltres();
   ecouterVehicules((liste) => { _vehicules = liste; rendreTout(); });
   ecouterHistorique((liste) => { _historique = liste; rendreTout(); });
+  ecouterArchives((liste) => { _archives = liste; rendreTout(); });
 });
