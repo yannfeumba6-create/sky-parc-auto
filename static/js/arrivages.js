@@ -761,12 +761,67 @@ function lignesDonneesActuelles() {
 function recalculerEtAfficher() {
   _importDonnees = construireDonnees(lignesDonneesActuelles(), _mappingParColonne);
   afficherMapping();
+  afficherChampsManquants();
   afficherApercu();
   const valides = _importDonnees.filter(estLigneValide);
   const status = document.getElementById("import-status");
   status.textContent = `${_importDonnees.length} ligne(s) détectée(s), dont ${valides.length} avec tous les champs obligatoires. Vérifie la correspondance des colonnes ci-dessous et corrige au besoin.`;
   const btn = document.getElementById("btn-importer");
   if (btn) btn.disabled = _importDonnees.length === 0;
+}
+
+// Champs à choix contrôlé (une liste connue de valeurs valides) pour
+// lesquels on peut proposer un remplissage groupé plutôt que de faire
+// taper chaque ligne une par une.
+const CHAMPS_CONTROLES = [
+  { cle: "marque", label: "Marque", options: () => optionsDe("v-marque") },
+  { cle: "type", label: "Type", options: () => optionsDe("v-type") },
+  { cle: "emplacement", label: "Emplacement", options: () => optionsDe("v-emplacement") },
+];
+
+function afficherChampsManquants() {
+  const wrap = document.getElementById("import-manquants-wrap");
+  if (!wrap) return;
+
+  const blocs = CHAMPS_CONTROLES.map((c) => {
+    const nManquants = _importDonnees.filter((d) => d.chassis && !d[c.cle]).length;
+    return nManquants > 0 ? { ...c, nManquants, options: c.options() } : null;
+  }).filter(Boolean);
+
+  if (blocs.length === 0) { wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+
+  wrap.innerHTML = `
+    <div class="section-lbl">Informations manquantes détectées</div>
+    <div class="info-box" style="margin-bottom:8px;">Certaines colonnes sont absentes du fichier ou vides sur plusieurs lignes. Choisis une valeur pour les remplir toutes d'un coup — tu pourras encore corriger ligne par ligne dans l'aperçu ci-dessous.</div>
+    <div class="import-manquants-grid">
+      ${blocs.map((b) => `
+        <div class="import-manquant-item">
+          <label>${b.label} <span style="color:var(--muted);">(${b.nManquants} ligne${b.nManquants > 1 ? "s" : ""} sans valeur)</span></label>
+          <div style="display:flex;gap:8px;">
+            <select id="manquant-${b.cle}" style="flex:1;">
+              <option value="">— Choisir —</option>
+              ${b.options.map((o) => `<option value="${o}">${o}</option>`).join("")}
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm" data-appliquer-manquant="${b.cle}">Appliquer à toutes</button>
+          </div>
+        </div>`).join("")}
+    </div>`;
+  wrap.style.display = "block";
+
+  wrap.querySelectorAll("[data-appliquer-manquant]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const champ = btn.dataset.appliquerManquant;
+      const val = document.getElementById(`manquant-${champ}`).value;
+      if (!val) { toast("Choisis d'abord une valeur", "terr"); return; }
+      _importDonnees.forEach((d) => { if (d.chassis && !d[champ]) d[champ] = val; });
+      afficherApercu();
+      afficherChampsManquants();
+      const valides = _importDonnees.filter(estLigneValide);
+      document.getElementById("import-status").textContent = `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;
+      const btnImporter = document.getElementById("btn-importer");
+      if (btnImporter) btnImporter.disabled = _importDonnees.length === 0;
+    });
+  });
 }
 
 function estLigneValide(d) {
@@ -833,13 +888,26 @@ function afficherApercu() {
   const count = document.getElementById("import-preview-count");
   if (!wrap) return;
 
+  const optionsParChamp = {
+    marque: optionsDe("v-marque"),
+    type: optionsDe("v-type"),
+    emplacement: optionsDe("v-emplacement"),
+  };
+
   const LIMITE = 40;
   head.innerHTML = `<tr>${COLONNES_APERCU.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
   body.innerHTML = _importDonnees.slice(0, LIMITE).map((d, i) => {
     const manquant = !estLigneValide(d);
-    return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) =>
-      `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`
-    ).join("")}</tr>`;
+    return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) => {
+      if (optionsParChamp[champ]) {
+        const valeur = d[champ] ?? "";
+        return `<td><select class="import-cell" data-ligne="${i}" data-champ="${champ}">
+          <option value="">—</option>
+          ${optionsParChamp[champ].map((o) => `<option value="${o}" ${o === valeur ? "selected" : ""}>${o}</option>`).join("")}
+        </select></td>`;
+      }
+      return `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`;
+    }).join("")}</tr>`;
   }).join("");
   count.textContent = _importDonnees.length;
   wrap.style.display = "block";
@@ -861,6 +929,7 @@ function afficherApercu() {
       const valides = _importDonnees.filter(estLigneValide);
       document.getElementById("import-status").textContent =
         `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;
+      afficherChampsManquants();
     });
   });
 }

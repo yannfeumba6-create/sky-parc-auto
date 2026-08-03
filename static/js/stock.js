@@ -5,6 +5,7 @@ import {
 } from "./data.js";
 
 let _vehicules = [];
+const _selection = new Set();
 
 window.onMarqueChange = function () {
   const marque = document.getElementById("v-marque").value;
@@ -134,8 +135,10 @@ function ligneTableau(v) {
   const label = STATUT_LABEL[v.statut] || v.statut;
   const jours = joursDepuis(v.dateEntree);
   const critique = v.statut === "stock" && jours !== null && jours >= 60;
+  const coche = _selection.has(v.id) ? "checked" : "";
   return `
     <tr data-id="${v.id}">
+      <td><input type="checkbox" class="select-ligne" data-id="${v.id}" ${coche}></td>
       <td class="plate">${esc(chassis6(v.chassis))}</td>
       <td>${esc(v.marque) || "—"}</td>
       <td>${esc(v.modele) || "—"}</td>
@@ -161,10 +164,11 @@ function rendreTableau() {
   const tbody = document.getElementById("stock-body");
   const liste = vehiculesFiltres();
   if (liste.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><strong>Aucun véhicule</strong>Ajuste les filtres ou ajoute un véhicule.</td></tr>`;
-    return;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state"><strong>Aucun véhicule</strong>Ajuste les filtres ou ajoute un véhicule.</td></tr>`;
+  } else {
+    tbody.innerHTML = liste.map(ligneTableau).join("");
   }
-  tbody.innerHTML = liste.map(ligneTableau).join("");
+  rendreBarreSelection();
 }
 
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
@@ -172,6 +176,62 @@ function rendreTableau() {
   document.getElementById(id).addEventListener("change", rendreTableau);
 });
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);
+
+// ---------------------------------------------------------------
+// Sélection multiple — actions groupées sur plusieurs véhicules
+// ---------------------------------------------------------------
+
+function rendreBarreSelection() {
+  const barre = document.getElementById("barre-selection");
+  const n = _selection.size;
+  document.getElementById("nb-selection").textContent = n;
+  barre.style.display = n > 0 ? "block" : "none";
+  const selectAll = document.getElementById("select-all");
+  const visibles = vehiculesFiltres().map((v) => v.id);
+  selectAll.checked = visibles.length > 0 && visibles.every((id) => _selection.has(id));
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "select-all") {
+    const visibles = vehiculesFiltres().map((v) => v.id);
+    if (e.target.checked) visibles.forEach((id) => _selection.add(id));
+    else visibles.forEach((id) => _selection.delete(id));
+    rendreTableau();
+    return;
+  }
+  if (e.target.classList.contains("select-ligne")) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) _selection.add(id);
+    else _selection.delete(id);
+    rendreBarreSelection();
+  }
+});
+
+window.viderSelection = function () {
+  _selection.clear();
+  rendreTableau();
+};
+
+window.exporterSelectionCSV = function () {
+  const liste = _vehicules.filter((v) => _selection.has(v.id));
+  if (liste.length === 0) { toast("Aucun véhicule sélectionné", "tinfo"); return; }
+  const headers = ["Châssis", "Marque", "Modèle", "Type", "Emplacement", "Année", "Statut", "Prix", "Date entrée"];
+  const rows = liste.map((v) => [v.chassis, v.marque, v.modele, v.type, v.emplacement, v.annee, STATUT_LABEL[v.statut] || v.statut, v.prix, v.dateEntree]);
+  exportCSV(`selection_stock_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+};
+
+window.sortirSelectionDuParc = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  if (!confirm(`Sortir ${ids.length} véhicule(s) du parc ? Ils seront archivés (consultables dans Véhicules archivés) et retirés du Stock véhicule.`)) return;
+  let n = 0;
+  for (const id of ids) {
+    const v = _vehicules.find((x) => x.id === id);
+    if (v) { await supprimerVehicule(v); n++; }
+  }
+  toast(`${n} véhicule(s) sorti(s) du parc`);
+  _selection.clear();
+};
 
 // ---------------------------------------------------------------
 // Modal véhicule — ouverture / pré-remplissage / sauvegarde
@@ -676,12 +736,67 @@ function lignesDonneesActuelles() {
 function recalculerEtAfficher() {
   _importDonnees = construireDonnees(lignesDonneesActuelles(), _mappingParColonne);
   afficherMapping();
+  afficherChampsManquants();
   afficherApercu();
   const valides = _importDonnees.filter(estLigneValide);
   const status = document.getElementById("import-status");
   status.textContent = `${_importDonnees.length} ligne(s) détectée(s), dont ${valides.length} avec tous les champs obligatoires. Vérifie la correspondance des colonnes ci-dessous et corrige au besoin.`;
   const btn = document.getElementById("btn-importer");
   if (btn) btn.disabled = _importDonnees.length === 0;
+}
+
+// Champs à choix contrôlé (une liste connue de valeurs valides) pour
+// lesquels on peut proposer un remplissage groupé plutôt que de faire
+// taper chaque ligne une par une.
+const CHAMPS_CONTROLES = [
+  { cle: "marque", label: "Marque", options: () => optionsDe("v-marque") },
+  { cle: "type", label: "Type", options: () => optionsDe("v-type") },
+  { cle: "emplacement", label: "Emplacement", options: () => optionsDe("v-emplacement") },
+];
+
+function afficherChampsManquants() {
+  const wrap = document.getElementById("import-manquants-wrap");
+  if (!wrap) return;
+
+  const blocs = CHAMPS_CONTROLES.map((c) => {
+    const nManquants = _importDonnees.filter((d) => d.chassis && !d[c.cle]).length;
+    return nManquants > 0 ? { ...c, nManquants, options: c.options() } : null;
+  }).filter(Boolean);
+
+  if (blocs.length === 0) { wrap.style.display = "none"; wrap.innerHTML = ""; return; }
+
+  wrap.innerHTML = `
+    <div class="section-lbl">Informations manquantes détectées</div>
+    <div class="info-box" style="margin-bottom:8px;">Certaines colonnes sont absentes du fichier ou vides sur plusieurs lignes. Choisis une valeur pour les remplir toutes d'un coup — tu pourras encore corriger ligne par ligne dans l'aperçu ci-dessous.</div>
+    <div class="import-manquants-grid">
+      ${blocs.map((b) => `
+        <div class="import-manquant-item">
+          <label>${b.label} <span style="color:var(--muted);">(${b.nManquants} ligne${b.nManquants > 1 ? "s" : ""} sans valeur)</span></label>
+          <div style="display:flex;gap:8px;">
+            <select id="manquant-${b.cle}" style="flex:1;">
+              <option value="">— Choisir —</option>
+              ${b.options.map((o) => `<option value="${o}">${o}</option>`).join("")}
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm" data-appliquer-manquant="${b.cle}">Appliquer à toutes</button>
+          </div>
+        </div>`).join("")}
+    </div>`;
+  wrap.style.display = "block";
+
+  wrap.querySelectorAll("[data-appliquer-manquant]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const champ = btn.dataset.appliquerManquant;
+      const val = document.getElementById(`manquant-${champ}`).value;
+      if (!val) { toast("Choisis d'abord une valeur", "terr"); return; }
+      _importDonnees.forEach((d) => { if (d.chassis && !d[champ]) d[champ] = val; });
+      afficherApercu();
+      afficherChampsManquants();
+      const valides = _importDonnees.filter(estLigneValide);
+      document.getElementById("import-status").textContent = `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;
+      const btnImporter = document.getElementById("btn-importer");
+      if (btnImporter) btnImporter.disabled = _importDonnees.length === 0;
+    });
+  });
 }
 
 function estLigneValide(d) {
@@ -738,13 +853,26 @@ function afficherApercu() {
   const count = document.getElementById("import-preview-count");
   if (!wrap) return;
 
+  const optionsParChamp = {
+    marque: optionsDe("v-marque"),
+    type: optionsDe("v-type"),
+    emplacement: optionsDe("v-emplacement"),
+  };
+
   const LIMITE = 40;
   head.innerHTML = `<tr>${COLONNES_APERCU.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
   body.innerHTML = _importDonnees.slice(0, LIMITE).map((d, i) => {
     const manquant = !estLigneValide(d);
-    return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) =>
-      `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`
-    ).join("")}</tr>`;
+    return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) => {
+      if (optionsParChamp[champ]) {
+        const valeur = d[champ] ?? "";
+        return `<td><select class="import-cell" data-ligne="${i}" data-champ="${champ}">
+          <option value="">—</option>
+          ${optionsParChamp[champ].map((o) => `<option value="${o}" ${o === valeur ? "selected" : ""}>${o}</option>`).join("")}
+        </select></td>`;
+      }
+      return `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`;
+    }).join("")}</tr>`;
   }).join("");
   count.textContent = _importDonnees.length;
   wrap.style.display = "block";
@@ -766,6 +894,7 @@ function afficherApercu() {
       const valides = _importDonnees.filter(estLigneValide);
       document.getElementById("import-status").textContent =
         `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;
+      afficherChampsManquants();
     });
   });
 }

@@ -78,23 +78,33 @@ function rendreKpis() {
 // Évolution entrées / sorties
 // ---------------------------------------------------------------
 
+// Le nombre d'entrées/sorties par mois est calculé à partir des DATES
+// SAISIES sur les fiches (dateEntree, client.dateAchat) — pas de la date
+// réelle à laquelle l'action a été enregistrée dans l'appli. Un véhicule
+// importé en août mais dont la fiche indique une entrée en juillet compte
+// donc bien pour juillet, pas pour août.
 function rendreFlux() {
   const liste = filtrer(_vehicules, "flux");
-  const chassisFiltres = new Set(liste.map((v) => v.chassis));
   const now = new Date();
   const entrees = new Array(12).fill(0);
   const sorties = new Array(12).fill(0);
   const labels = [];
   for (let i = 11; i >= 0; i--) labels.push(MOIS[new Date(now.getFullYear(), now.getMonth() - i, 1).getMonth()]);
 
-  _historique.filter((h) => chassisFiltres.has(h.chassis)).forEach((h) => {
-    const d = toDate(h.horodatage);
-    if (!d) return;
+  const indexMois = (dateStr) => {
+    const d = toDate(dateStr);
+    if (!d) return -1;
     const diffMois = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-    if (diffMois < 0 || diffMois > 11) return;
-    const idx = 11 - diffMois;
-    if (h.action === "Entrée en stock") entrees[idx]++;
-    if (h.action === "Sortie du parc" || h.statut === "vendu") sorties[idx]++;
+    return (diffMois < 0 || diffMois > 11) ? -1 : 11 - diffMois;
+  };
+
+  liste.forEach((v) => {
+    const idxEntree = indexMois(v.dateEntree);
+    if (idxEntree !== -1) entrees[idxEntree]++;
+    if (v.statut === "vendu" && v.client && v.client.dateAchat) {
+      const idxSortie = indexMois(v.client.dateAchat);
+      if (idxSortie !== -1) sorties[idxSortie]++;
+    }
   });
 
   const tc = couleurTexte();
@@ -106,7 +116,7 @@ function rendreFlux() {
       labels,
       datasets: [
         { label: "Entrées", data: entrees, backgroundColor: "rgba(39,174,96,.75)", borderRadius: 5 },
-        { label: "Sorties", data: sorties, backgroundColor: "rgba(192,57,43,.75)", borderRadius: 5 },
+        { label: "Sorties (ventes)", data: sorties, backgroundColor: "rgba(192,57,43,.75)", borderRadius: 5 },
       ],
     },
     options: {
