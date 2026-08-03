@@ -191,6 +191,18 @@ window.viderSelection = function () {
   rendreTableau();
 };
 
+window.supprimerSelectionArrivages = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  if (!confirm(`Supprimer définitivement ${ids.length} arrivage(s) sélectionné(s) ? Cette action est irréversible.`)) return;
+  for (const id of ids) {
+    await supprimerArrivage(id);
+  }
+  toast(`${ids.length} arrivage(s) supprimé(s)`);
+  _selection.clear();
+  rendreTableau();
+};
+
 // ---------------------------------------------------------------
 // Entrée en stock — demande la date réelle, et si le modèle de l'arrivage
 // est générique (ex. "X50", sans boîte précisée), impose de choisir la

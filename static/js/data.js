@@ -29,15 +29,25 @@ function pliAccentsCasse(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
+// Version "compacte" : en plus de la casse et des accents, ignore tous les
+// espaces, tirets et autres séparateurs. Nécessaire car un fournisseur peut
+// écrire "JETOUR", "Je tour", "jetour " ou "X 50" tout aussi bien que
+// "Jetour" / "X50" — seules les lettres et chiffres comptent pour la
+// reconnaissance, la police ou la mise en forme du fichier n'a aucune
+// importance.
+function compact(s) {
+  return pliAccentsCasse(s).replace(/[^a-z0-9]/g, "");
+}
+
 // Ramène une marque écrite librement (import CSV/PDF/Excel, casse ou
-// espacement quelconque — ex. "jetour", "JETOUR ") vers l'orthographe
-// exacte utilisée partout ailleurs dans l'appli. Indispensable pour que les
-// filtres (qui comparent une chaîne exacte) retrouvent les véhicules
-// importés — sinon la marque s'affiche correctement mais aucun filtre ne
-// la retrouve jamais.
+// espacement quelconque — ex. "jetour", "JETOUR ", "Je Tour") vers
+// l'orthographe exacte utilisée partout ailleurs dans l'appli. Indispensable
+// pour que les filtres (qui comparent une chaîne exacte) retrouvent les
+// véhicules importés — sinon la marque s'affiche correctement mais aucun
+// filtre ne la retrouve jamais.
 export function normaliserMarque(brute) {
-  const n = pliAccentsCasse(brute);
-  const marque = Object.keys(MODELES_PAR_MARQUE).find((m) => pliAccentsCasse(m) === n);
+  const n = compact(brute);
+  const marque = Object.keys(MODELES_PAR_MARQUE).find((m) => compact(m) === n);
   return marque || String(brute || "").trim();
 }
 
@@ -68,27 +78,33 @@ export function estModeleGenerique(marque, modele) {
 // n'est trouvé, le nom générique est renvoyé tel quel (la ligne sera alors
 // signalée incomplète dans l'aperçu, à corriger à la main).
 export function normaliserModele(marque, modeleBrut, precis) {
-  const brut = pliAccentsCasse(modeleBrut);
+  const brut = compact(modeleBrut);
   if (!brut) return String(modeleBrut || "").trim();
 
   const tousLesModeles = MODELES_PAR_MARQUE[marque] || [];
-  const exact = tousLesModeles.find((m) => pliAccentsCasse(m) === brut);
+  const exact = tousLesModeles.find((m) => compact(m) === brut);
   if (exact) return exact;
 
   const familles = FAMILLES_MODELES[marque] || {};
   for (const [base, variantes] of Object.entries(familles)) {
-    const baseKey = pliAccentsCasse(base);
-    if (new RegExp(`\\b${baseKey}\\b`).test(brut)) {
-      if (!precis) return base;
+    const baseKey = compact(base);
+    // Le texte contient le nom de base (ex. "x50"), quoi qu'il y ait écrit
+    // autour (Confort, Luxury, Premium…) et quel que soit l'espacement.
+    if (brut.includes(baseKey)) {
+      if (!precis) return base; // Arrivage : on garde le nom générique
+      // Stock : on tente de deviner la variante à partir de mots-clés
+      // présents dans le texte (ex. "auto", "manuel"…) ; sinon le nom
+      // générique est renvoyé tel quel — la ligne sera alors marquée
+      // incomplète dans l'aperçu, à préciser à la main.
       const auto = variantes.find((v) => /auto/i.test(v));
       const manuel = variantes.find((v) => /manuel/i.test(v) || /\bm\b/i.test(v));
-      if (auto && /auto/.test(brut)) return auto;
-      if (manuel && /(manuelle?|\bm\b)/.test(brut)) return manuel;
+      if (auto && brut.includes("auto")) return auto;
+      if (manuel && (brut.includes("manuel") || /(^|[^a-z0-9])m($|[^a-z0-9])/i.test(pliAccentsCasse(modeleBrut)))) return manuel;
       return base;
     }
   }
 
-  const partiel = tousLesModeles.find((m) => brut.includes(pliAccentsCasse(m)));
+  const partiel = tousLesModeles.find((m) => brut.includes(compact(m)));
   if (partiel) return partiel;
 
   return String(modeleBrut || "").trim();
