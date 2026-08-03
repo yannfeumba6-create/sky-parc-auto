@@ -1,6 +1,7 @@
-import { ecouterHistorique, marqueCorrespond } from "./data.js";
+import { ecouterHistorique, supprimerHistorique, marqueCorrespond } from "./data.js";
 
 let _historique = [];
+const _selection = new Set();
 
 function toDate(v) {
   if (!v) return null;
@@ -30,12 +31,15 @@ function rendre() {
   const liste = filtres();
   const tbody = document.getElementById("historique-body");
   if (liste.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><strong>Aucun mouvement</strong>Ajuste les filtres.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><strong>Aucun mouvement</strong>Ajuste les filtres.</td></tr>`;
+    rendreBarreSelection();
     return;
   }
   tbody.innerHTML = liste.map((h) => {
     const d = toDate(h.horodatage);
+    const coche = _selection.has(h.id) ? "checked" : "";
     return `<tr>
+      <td><input type="checkbox" class="select-ligne" data-id="${h.id}" ${coche}></td>
       <td>${d ? d.toLocaleString("fr-FR") : "—"}</td>
       <td>${esc(h.action) || "—"}</td>
       <td>${esc(h.marque) || ""} ${esc(h.modele) || ""}</td>
@@ -44,7 +48,50 @@ function rendre() {
       <td><b>${esc(h.utilisateur) || "—"}</b></td>
     </tr>`;
   }).join("");
+  rendreBarreSelection();
 }
+
+function rendreBarreSelection() {
+  const barre = document.getElementById("barre-selection");
+  const n = _selection.size;
+  document.getElementById("nb-selection").textContent = n;
+  barre.style.display = n > 0 ? "block" : "none";
+  const selectAll = document.getElementById("select-all");
+  const visibles = filtres().map((h) => h.id);
+  selectAll.checked = visibles.length > 0 && visibles.every((id) => _selection.has(id));
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "select-all") {
+    const visibles = filtres().map((h) => h.id);
+    if (e.target.checked) visibles.forEach((id) => _selection.add(id));
+    else visibles.forEach((id) => _selection.delete(id));
+    rendre();
+    return;
+  }
+  if (e.target.classList.contains("select-ligne")) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) _selection.add(id);
+    else _selection.delete(id);
+    rendreBarreSelection();
+  }
+});
+
+window.viderSelection = function () {
+  _selection.clear();
+  rendre();
+};
+
+window.supprimerSelectionHistorique = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  if (!confirm(`Supprimer définitivement ${ids.length} ligne(s) d'historique sélectionnée(s) ? Cette action est irréversible.`)) return;
+  for (const id of ids) {
+    await supprimerHistorique(id);
+  }
+  toast(`${ids.length} ligne(s) supprimée(s)`);
+  _selection.clear();
+};
 
 ["f-recherche", "f-marque", "f-action"].forEach((id) => {
   document.getElementById(id).addEventListener("input", rendre);

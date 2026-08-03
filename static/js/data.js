@@ -270,6 +270,17 @@ export async function majVehicule(id, donnees) {
 // Sortie définitive d'un véhicule du parc : on ne supprime jamais
 // l'information, on l'archive dans vehicules_archives (avec toutes ses
 // infos + qui l'a sorti et quand) avant de le retirer du stock actif.
+// Suppression DÉFINITIVE d'un véhicule (Stock ou Endommagés) — contrairement
+// à supprimerVehicule (sortie du parc), celle-ci ne passe PAS par les
+// archives : le véhicule est retiré sans laisser de trace consultable.
+// À utiliser uniquement pour corriger une erreur de saisie, pas pour une
+// vraie sortie de parc (qui doit utiliser la Sortie du Stock véhicule).
+export async function supprimerVehiculeDefinitivement(vehicule) {
+  await authPrete;
+  await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
+  await deleteDoc(doc(db, "vehicules", vehicule.id));
+}
+
 export async function supprimerVehicule(vehicule) {
   await authPrete;
   await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
@@ -296,6 +307,13 @@ export async function restaurerArchive(archive) {
   await authPrete;
   const { id, sortiLe, sortiPar, ...donnees } = archive;
   await creerVehicule(donnees);
+  await deleteDoc(doc(db, "vehicules_archives", id));
+}
+
+// Suppression DÉFINITIVE d'un véhicule archivé (efface l'historique de
+// sortie associé à cette fiche — irréversible).
+export async function supprimerArchive(id) {
+  await authPrete;
   await deleteDoc(doc(db, "vehicules_archives", id));
 }
 
@@ -335,7 +353,7 @@ export async function ecouterHistorique(callback) {
   await authPrete;
   const q = query(historiqueRef, orderBy("horodatage", "desc"));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => d.data()));
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
 }
 
@@ -343,7 +361,12 @@ export async function chargerHistorique() {
   await authPrete;
   const q = query(historiqueRef, orderBy("horodatage", "desc"));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function supprimerHistorique(id) {
+  await authPrete;
+  await deleteDoc(doc(db, "historique", id));
 }
 
 // ---------------------------------------------------------------

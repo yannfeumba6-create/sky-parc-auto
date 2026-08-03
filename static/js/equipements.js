@@ -4,6 +4,7 @@ import {
 } from "./firebase-config.js";
 
 let _equipements = [];
+const _selection = new Set();
 
 async function charger() {
   await authPrete;
@@ -16,15 +17,18 @@ async function charger() {
 function rendre() {
   const tbody = document.getElementById("equip-body");
   if (_equipements.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><strong>Aucun équipement en stock</strong>Ajoute un équipement ou charge les équipements de base.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><strong>Aucun équipement en stock</strong>Ajoute un équipement ou charge les équipements de base.</td></tr>`;
+    rendreBarreSelection();
     return;
   }
   tbody.innerHTML = _equipements.map((e) => {
     const ppc = e.piecesParCarton || 1;
     const cartons = Math.floor((e.stockPieces || 0) / ppc);
     const reste = (e.stockPieces || 0) % ppc;
+    const coche = _selection.has(e.id) ? "checked" : "";
     return `
       <tr>
+        <td><input type="checkbox" class="select-ligne" data-id="${e.id}" ${coche}></td>
         <td><b>${esc(e.nom)}</b></td>
         <td>${ppc > 1 ? `Carton de ${ppc}` : "À l'unité"}</td>
         <td>${cartons}</td>
@@ -37,7 +41,52 @@ function rendre() {
         </td>
       </tr>`;
   }).join("");
+  rendreBarreSelection();
 }
+
+function rendreBarreSelection() {
+  const barre = document.getElementById("barre-selection");
+  const n = _selection.size;
+  document.getElementById("nb-selection").textContent = n;
+  barre.style.display = n > 0 ? "block" : "none";
+  const selectAll = document.getElementById("select-all");
+  const visibles = _equipements.map((e) => e.id);
+  selectAll.checked = visibles.length > 0 && visibles.every((id) => _selection.has(id));
+}
+
+document.addEventListener("change", (e) => {
+  if (e.target.id === "select-all") {
+    const visibles = _equipements.map((eq) => eq.id);
+    if (e.target.checked) visibles.forEach((id) => _selection.add(id));
+    else visibles.forEach((id) => _selection.delete(id));
+    rendre();
+    return;
+  }
+  if (e.target.classList.contains("select-ligne")) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) _selection.add(id);
+    else _selection.delete(id);
+    rendreBarreSelection();
+  }
+});
+
+window.viderSelection = function () {
+  _selection.clear();
+  rendre();
+};
+
+window.supprimerSelectionEquipements = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  if (!confirm(`Supprimer ${ids.length} équipement(s) sélectionné(s) du stock ? Cette action est irréversible.`)) return;
+  await authPrete;
+  for (const id of ids) {
+    await deleteDoc(doc(db, "equipements_stock", id));
+  }
+  toast(`${ids.length} équipement(s) supprimé(s)`);
+  _selection.clear();
+  charger();
+};
 
 // ---------------------------------------------------------------
 // Formulaire Nouvel équipement

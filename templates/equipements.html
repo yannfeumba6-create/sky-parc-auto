@@ -13,12 +13,20 @@
   Stock des équipements utilisés pour préparer/équiper les véhicules (extincteurs, tapis, chasubles, cric, caisse à outils…). Un même équipement peut être compté en cartons ET en unités isolées à la fois (ex : 1 carton + 3 unités). Distinct de la checklist par véhicule dans Stock véhicule — quand un équipement coché sur un véhicule change, ce stock se met à jour automatiquement.
 </div>
 
+<div class="card" id="barre-selection" style="display:none;margin-bottom:16px;">
+  <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span><b id="nb-selection">0</b> équipement(s) sélectionné(s)</span>
+    <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="supprimerSelectionEquipements()">🗑 Supprimer la sélection</button>
+    <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
+  </div>
+</div>
+
 <div class="table-wrap card" style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Équipement</th><th>Conditionnement</th><th>Cartons complets</th><th>Unités isolées</th><th>Total pièces</th><th>Actions</th></tr>
+      <tr><th><input type="checkbox" id="select-all"></th><th>Équipement</th><th>Conditionnement</th><th>Cartons complets</th><th>Unités isolées</th><th>Total pièces</th><th>Actions</th></tr>
     </thead>
-    <tbody id="equip-body"><tr><td colspan="6" class="empty-state">Chargement…</td></tr></tbody>
+    <tbody id="equip-body"><tr><td colspan="7" class="empty-state">Chargement…</td></tr></tbody>
   </table>
 </div>
 

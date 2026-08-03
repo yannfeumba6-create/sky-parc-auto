@@ -163,14 +163,14 @@ def vendus():
     )
 
 
-@app.route("/reserves")
+@app.route("/endommages")
 @login_required
-def reserves():
+def endommages():
     return render_template(
-        "reserves.html",
+        "endommages.html",
         marques=MARQUES,
         emplacements=EMPLACEMENTS,
-        active_page="reserves",
+        active_page="endommages",
     )
 
 

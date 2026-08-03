@@ -1,5 +1,5 @@
 import {
-  ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule,
+  ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule, supprimerVehiculeDefinitivement,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
   importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond,
 } from "./data.js";
@@ -154,6 +154,7 @@ function ligneTableau(v) {
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
         <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
       </td>
     </tr>`;
 }
@@ -222,6 +223,19 @@ window.sortirSelectionDuParc = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
   ouvrirModalSortieBulk(ids);
+};
+
+window.supprimerSelectionVehicules = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  if (!confirm(`Supprimer définitivement ${ids.length} véhicule(s) sélectionné(s) ? Cette action est irréversible et ne passe pas par les archives.`)) return;
+  let n = 0;
+  for (const id of ids) {
+    const v = _vehicules.find((x) => x.id === id);
+    if (v) { await supprimerVehiculeDefinitivement(v); n++; }
+  }
+  toast(`${n} véhicule(s) supprimé(s)`);
+  _selection.clear();
 };
 
 // ---------------------------------------------------------------
@@ -344,6 +358,13 @@ document.addEventListener("click", async (e) => {
   }
   if (action === "sortir") {
     ouvrirModalSortie(id);
+  }
+  if (action === "supprimer") {
+    const v = _vehicules.find((x) => x.id === id);
+    if (!v) return;
+    if (!confirm(`Supprimer définitivement "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ? Cette action est irréversible et ne passe pas par les archives.`)) return;
+    await supprimerVehiculeDefinitivement(v);
+    toast("Véhicule supprimé");
   }
   if (action === "historique") {
     const v = _vehicules.find((x) => x.id === id);
