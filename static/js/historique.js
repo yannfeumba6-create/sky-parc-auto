@@ -85,7 +85,10 @@ window.viderSelection = function () {
 window.supprimerSelectionHistorique = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-  if (!confirm(`Supprimer définitivement ${ids.length} ligne(s) d'historique sélectionnée(s) ? Cette action est irréversible.`)) return;
+  const mdp = prompt(`Suppression de ${ids.length} ligne(s) d'historique — entrer le mot de passe pour confirmer :`);
+  if (mdp === null) return;
+  if (mdp !== "2026") { toast("Mot de passe incorrect", "terr"); return; }
+  if (!confirm(`Confirmer la suppression définitive de ${ids.length} ligne(s) d'historique ? Cette action est irréversible.`)) return;
   for (const id of ids) {
     await supprimerHistorique(id);
   }

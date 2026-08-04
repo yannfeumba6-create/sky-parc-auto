@@ -1,4 +1,4 @@
-import { ecouterArchives, restaurerArchive, supprimerArchive, chassis6, STATUT_LABEL, marqueCorrespond } from "./data.js";
+import { ecouterArchives, restaurerArchive, supprimerArchive, chassis6, marqueCorrespond } from "./data.js";
 
 let _archives = [];
 const _selection = new Set();
@@ -9,11 +9,21 @@ function filtres() {
   return _archives.filter((v) => {
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (recherche) {
-      const cible = `${v.chassis || ""} ${v.modele || ""} ${v.client?.nom || ""}`.toLowerCase();
+      const cible = `${v.chassis || ""} ${v.modele || ""}`.toLowerCase();
       if (!cible.includes(recherche)) return false;
     }
     return true;
   });
+}
+
+// La date de sortie affichée est celle SAISIE par l'utilisateur lors de la
+// sortie du véhicule (v.dateSortie). Pour les fiches archivées avant cette
+// fonctionnalité (pas de v.dateSortie enregistrée), on retombe sur l'horodatage
+// technique v.sortiLe, à défaut de mieux.
+function dateSortieAffichee(v) {
+  if (v.dateSortie) return v.dateSortie;
+  const d = v.sortiLe?.toDate ? v.sortiLe.toDate() : null;
+  return d ? d.toLocaleDateString("fr-FR") : "—";
 }
 
 function rendre() {
@@ -25,16 +35,15 @@ function rendre() {
     return;
   }
   tbody.innerHTML = liste.map((v) => {
-    const d = v.sortiLe?.toDate ? v.sortiLe.toDate() : null;
     const coche = _selection.has(v.id) ? "checked" : "";
     return `<tr>
       <td><input type="checkbox" class="select-ligne" data-id="${v.id}" ${coche}></td>
       <td class="plate">${esc(chassis6(v.chassis))}</td>
       <td>${esc(v.marque) || "—"}</td>
       <td>${esc(v.modele) || "—"}</td>
-      <td>${esc(STATUT_LABEL[v.statut] || v.statut) || "—"}</td>
-      <td>${esc(v.client?.nom) || "—"}</td>
-      <td>${d ? d.toLocaleString("fr-FR") : "—"}</td>
+      <td>${esc(v.dateEntree) || "—"}</td>
+      <td>${esc(dateSortieAffichee(v))}</td>
+      <td>${esc(v.destination) || "—"}</td>
       <td><b>${esc(v.sortiPar) || "—"}</b></td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" data-restaurer="${v.id}">Restaurer en stock</button>
@@ -111,6 +120,27 @@ document.addEventListener("click", async (e) => {
   document.getElementById(id).addEventListener("input", rendre);
   document.getElementById(id).addEventListener("change", rendre);
 });
+
+// ---------------------------------------------------------------
+// Export CSV / Excel / PDF
+// ---------------------------------------------------------------
+
+window.exporterCSV = function () {
+  const liste = filtres();
+  if (liste.length === 0) { toast("Aucun véhicule archivé à exporter", "tinfo"); return; }
+  const headers = ["Châssis", "Marque", "Modèle", "Date d'entrée", "Date de sortie", "Destination", "Sorti par"];
+  const rows = liste.map((v) => [v.chassis, v.marque, v.modele, v.dateEntree, dateSortieAffichee(v), v.destination, v.sortiPar]);
+  exportCSV(`vehicules_archives_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+};
+
+window.exporterPDF = function () {
+  const liste = filtres();
+  const rows = liste.map((v) => `<tr><td>${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td><td>${esc(v.dateEntree) || "—"}</td><td>${esc(dateSortieAffichee(v))}</td><td>${esc(v.destination) || "—"}</td><td>${esc(v.sortiPar) || "—"}</td></tr>`).join("");
+  document.getElementById("pdf-content").innerHTML = `
+    <div class="kpi-row"><div class="kpi-box"><div class="kpi-val">${liste.length}</div><div class="kpi-lbl">Véhicules archivés</div></div></div>
+    <table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Entrée</th><th>Sortie</th><th>Destination</th><th>Sorti par</th></tr></thead><tbody>${rows}</tbody></table>`;
+  printPDF("pdf-content", "Véhicules archivés");
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   ecouterArchives((liste) => { _archives = liste; rendre(); });

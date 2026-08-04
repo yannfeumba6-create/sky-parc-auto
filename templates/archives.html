@@ -8,11 +8,16 @@
   Véhicules sortis définitivement du parc — leurs informations sont conservées ici plutôt que supprimées. Tu peux les restaurer dans le Stock véhicule si la sortie était une erreur.
 </div>
 
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <button class="btn btn-ghost" onclick="exporterCSV()">↓ Excel / CSV (filtré)</button>
+  <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
+</div>
+
 <div class="card">
   <div class="card-header"><div class="card-title">Filtres</div></div>
   <div style="padding:14px 18px;">
     <div class="form-grid" style="grid-template-columns:repeat(2,1fr);gap:10px;">
-      <div class="form-group" style="margin-bottom:0;"><label>Recherche (châssis, modèle, client)</label><input type="text" id="f-recherche"></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Recherche (châssis, modèle)</label><input type="text" id="f-recherche"></div>
       <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
     </div>
   </div>
@@ -28,10 +33,12 @@
 
 <div class="table-wrap card" style="overflow-x:auto;">
   <table>
-    <thead><tr><th><input type="checkbox" id="select-all"></th><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Dernier statut</th><th>Client</th><th>Sorti le</th><th>Sorti par</th><th>Actions</th></tr></thead>
+    <thead><tr><th><input type="checkbox" id="select-all"></th><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Date d'entrée</th><th>Date de sortie</th><th>Destination</th><th>Sorti par</th><th>Actions</th></tr></thead>
     <tbody id="archives-body"><tr><td colspan="9" class="empty-state">Chargement…</td></tr></tbody>
   </table>
 </div>
+
+<div id="pdf-content" style="display:none"></div>
 
 {% endblock %}
 {% block scripts %}
