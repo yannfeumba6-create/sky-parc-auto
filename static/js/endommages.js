@@ -1,4 +1,4 @@
-import { ecouterVehicules, majVehicule, supprimerVehiculeDefinitivement, chassis6, STATUT_LABEL, STATUT_BADGE, marqueCorrespond } from "./data.js";
+import { ecouterVehicules, majVehicule, chassis6, STATUT_LABEL, STATUT_BADGE, marqueCorrespond } from "./data.js";
 
 let _tous = [];
 const _selection = new Set();
@@ -70,8 +70,7 @@ function rendre() {
         <td style="white-space:nowrap;">
           ${v.statut === "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="prise-en-charge" data-id="${v.id}">Prise en charge</button>` : ""}
           ${v.statut === "prise_en_charge" ? `<button class="btn btn-ghost btn-sm" style="color:var(--green);" data-action="confirmer-reparation" data-id="${v.id}">Confirmer réparation</button>` : ""}
-          ${v.statut === "repare" ? `<button class="btn btn-ghost btn-sm" style="color:var(--green);" data-action="remettre-stock" data-id="${v.id}">Remettre en stock</button>` : ""}
-          <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}" title="Retirer de la liste — remet automatiquement en stock">🗑 Remettre en stock</button>
         </td>
       </tr>`;
     }).join("");
@@ -111,16 +110,19 @@ window.viderSelection = function () {
   rendre();
 };
 
+// "Supprimer" un véhicule de la liste des Endommagés ne le supprime plus
+// jamais définitivement de la base — il est automatiquement remis en
+// stock (parc), comme si sa réparation était terminée.
 window.supprimerSelectionEndommages = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-  if (!confirm(`Supprimer définitivement ${ids.length} véhicule(s) sélectionné(s) ? Cette action est irréversible.`)) return;
+  if (!confirm(`Retirer ${ids.length} véhicule(s) sélectionné(s) de la liste des Endommagés ? Ils seront automatiquement remis en Stock véhicule parc.`)) return;
   let n = 0;
   for (const id of ids) {
     const v = _tous.find((x) => x.id === id);
-    if (v) { await supprimerVehiculeDefinitivement(v); n++; }
+    if (v) { await majVehicule(id, { statut: "stock", etatReparation: null }); n++; }
   }
-  toast(`${n} véhicule(s) supprimé(s)`);
+  toast(`${n} véhicule(s) remis en stock`);
   _selection.clear();
 };
 
@@ -201,9 +203,9 @@ document.addEventListener("click", async (e) => {
   }
 
   if (action === "supprimer") {
-    if (!confirm(`Supprimer définitivement "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ? Cette action est irréversible.`)) return;
-    await supprimerVehiculeDefinitivement(v);
-    toast("Véhicule supprimé");
+    if (!confirm(`Retirer "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) de la liste des Endommagés ? Il sera automatiquement remis en Stock véhicule parc.`)) return;
+    await majVehicule(id, { statut: "stock", etatReparation: null });
+    toast("Véhicule remis en stock");
   }
 });
 

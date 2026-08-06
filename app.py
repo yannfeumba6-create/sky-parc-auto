@@ -174,6 +174,16 @@ def vendus():
     )
 
 
+@app.route("/reserves")
+@login_required
+def reserves():
+    return render_template(
+        "reserves.html",
+        marques=MARQUES,
+        active_page="reserves",
+    )
+
+
 @app.route("/endommages")
 @login_required
 def endommages():

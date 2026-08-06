@@ -351,6 +351,7 @@ export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
     equipements: equipementsSortie,
     dateSortie: sortieInfo.dateSortie,
     destination: sortieInfo.destination,
+    chauffeurSortie: sortieInfo.chauffeur || "",
     statut: "stock",
     entreShowroomLe: serverTimestamp(),
     entreShowroomPar: window.UTILISATEUR || "",
@@ -694,6 +695,10 @@ export async function entrerArrivageEnStock(arrivage, dateEntreeReelle) {
   const { id, dateArriveePrevue, ...donnees } = arrivage;
   donnees.dateEntree = dateEntreeReelle;
   donnees.statut = "stock";
+  // Un véhicule entrant vient toujours physiquement au Parc Broli en
+  // premier (jamais directement dans un showroom) — l'emplacement est
+  // donc toujours celui-ci par défaut, quel que soit ce qui était prévu.
+  donnees.emplacement = "Parc Broli";
   await creerVehicule(donnees);
   await supprimerArrivage(id);
 }

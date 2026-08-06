@@ -97,7 +97,7 @@ function vehiculesFiltres() {
   const periode = document.getElementById("f-periode").value;
 
   return _vehicules.filter((v) => {
-    if (["endommage", "prise_en_charge", "repare"].includes(v.statut)) return false;
+    if (["endommage", "prise_en_charge", "repare", "reserve"].includes(v.statut)) return false;
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
@@ -381,8 +381,11 @@ document.addEventListener("click", async (e) => {
 
   if (action === "modifier") return ouvrirEdition(id);
   if (action === "reserver") {
-    await majVehicule(id, { statut: "reserve" });
-    toast("Véhicule réservé (client a déjà acheté mais le véhicule reste au parc)");
+    const motif = prompt("Motif de la réservation (raison pour laquelle ce véhicule est réservé) :");
+    if (motif === null) return;
+    if (!motif.trim()) { toast("Le motif de la réservation est obligatoire", "terr"); return; }
+    await majVehicule(id, { statut: "reserve", motifReservation: motif.trim(), dateReservation: new Date().toISOString().slice(0, 10) });
+    toast("Véhicule réservé — visible dans Véhicules réservés");
   }
   if (action === "lever-reserve") {
     await majVehicule(id, { statut: "stock" });

@@ -2,10 +2,12 @@ import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
   entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
   importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
-  marqueCorrespond, modeleCorrespond, normaliserDateTexte,
+  marqueCorrespond, modeleCorrespond, normaliserDateTexte, ecouterVehicules, ecouterShowroom,
 } from "./data.js";
 
 let _arrivages = [];
+let _vehiculesParc = [];
+let _showroomListe = [];
 const _selection = new Set();
 
 window.onMarqueChange = function () {
@@ -42,13 +44,6 @@ function rafraichirListeCouleurs() {
   dl.innerHTML = couleursConnues().map((c) => `<option value="${c}"></option>`).join("");
 }
 
-const SITE_KEYS = {
-  "Parc Broli": "site-broli",
-  "Showroom Douala": "site-douala",
-  "Showroom Yaoundé": "site-yaounde",
-  "Showroom Bafoussam": "site-bafoussam",
-};
-
 function rendreTout() {
   rendreIndicateurs();
   rendreTableau();
@@ -59,24 +54,33 @@ function demarrerEcoute() {
     _arrivages = liste;
     rendreTout();
   });
+  // Le Parc et les 3 Showrooms sont sourcés depuis les vraies collections
+  // en temps réel (pas depuis le champ "emplacement prévu" de l'arrivage,
+  // qui n'a plus vraiment de sens : un véhicule qui arrive va toujours
+  // d'abord au Parc Broli — voir entrerArrivageEnStock).
+  ecouterVehicules((liste) => { _vehiculesParc = liste; rendreIndicateurs(); });
+  ecouterShowroom((liste) => { _showroomListe = liste; rendreIndicateurs(); });
 }
 
-// Les indicateurs tiennent compte des filtres marque/modèle (mais pas des
-// autres filtres, sinon le filtre "Emplacement" masquerait les 3 autres
-// compteurs) — cohérent avec le Stock Showroom.
+// Aperçu de la répartition ACTUELLE du parc (indépendant des arrivages —
+// tient compte des filtres marque/modèle de cette page).
 function rendreIndicateurs() {
   const marque = document.getElementById("f-marque").value;
   const modele = document.getElementById("f-modele").value;
-  const base = _arrivages.filter((v) =>
+  const correspond = (v) =>
     (!marque || marqueCorrespond(v.marque, marque)) &&
-    (!modele || modeleCorrespond(v.marque, v.modele, modele))
-  );
-  document.getElementById("qte-attendue").textContent = base.length;
-  Object.entries(SITE_KEYS).forEach(([site, id]) => {
-    const n = base.filter((v) => v.emplacement === site).length;
-    const el = document.getElementById(id);
-    if (el) el.textContent = n;
-  });
+    (!modele || modeleCorrespond(v.marque, v.modele, modele));
+
+  const baseArrivages = _arrivages.filter(correspond);
+  document.getElementById("qte-attendue").textContent = baseArrivages.length;
+
+  const auParc = _vehiculesParc.filter((v) => (v.statut === "stock" || v.statut === "reserve") && correspond(v));
+  const enShowroom = _showroomListe.filter(correspond);
+
+  document.getElementById("site-broli").textContent = auParc.length;
+  document.getElementById("site-douala").textContent = enShowroom.filter((v) => v.destination === "Showroom Douala").length;
+  document.getElementById("site-yaounde").textContent = enShowroom.filter((v) => v.destination === "Showroom Yaoundé").length;
+  document.getElementById("site-bafoussam").textContent = enShowroom.filter((v) => v.destination === "Showroom Bafoussam").length;
 }
 
 function dansPeriode(dateStr, periode) {

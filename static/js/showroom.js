@@ -22,6 +22,7 @@ function filtres() {
   const ville = document.getElementById("f-ville").value;
   const statut = document.getElementById("f-statut").value;
   return _showroom.filter((v) => {
+    if (v.statut === "reserve") return false; // déplacé vers Véhicules réservés
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
     if (ville && v.destination !== ville) return false;
@@ -54,7 +55,7 @@ function rendre() {
   const liste = filtres();
   const tbody = document.getElementById("showroom-body");
   if (liste.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><strong>Aucun véhicule en showroom</strong>Ajuste les filtres, ou envoie un véhicule depuis le Stock véhicule parc.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><strong>Aucun véhicule en showroom</strong>Ajuste les filtres, ou envoie un véhicule depuis le Stock véhicule parc.</td></tr>`;
   } else {
     tbody.innerHTML = liste.map((v) => {
       const badge = STATUT_BADGE[v.statut] || "badge-stock";
@@ -69,6 +70,7 @@ function rendre() {
         <td><span class="tag ${badge}">${esc(label)}</span></td>
         <td>${esc(v.dateEntree) || "—"}</td>
         <td>${esc(v.dateSortie) || "—"}</td>
+        <td>${esc(v.chauffeurSortie) || "—"}</td>
         <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
         <td style="white-space:nowrap;">
           ${v.statut === "stock" ? `<button class="btn btn-ghost btn-sm" data-action="reserver" data-id="${v.id}">Réserver</button>` : ""}
@@ -211,8 +213,11 @@ document.addEventListener("click", async (e) => {
   if (!v) return;
 
   if (action === "reserver") {
-    await majVehiculeShowroom(id, { statut: "reserve" });
-    toast("Véhicule réservé (client a déjà acheté mais le véhicule reste au showroom)");
+    const motif = prompt("Motif de la réservation (raison pour laquelle ce véhicule est réservé) :");
+    if (motif === null) return;
+    if (!motif.trim()) { toast("Le motif de la réservation est obligatoire", "terr"); return; }
+    await majVehiculeShowroom(id, { statut: "reserve", motifReservation: motif.trim(), dateReservation: new Date().toISOString().slice(0, 10) });
+    toast("Véhicule réservé — visible dans Véhicules réservés");
   }
   if (action === "lever-reserve") {
     await majVehiculeShowroom(id, { statut: "stock" });

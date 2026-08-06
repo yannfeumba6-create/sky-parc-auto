@@ -1,40 +1,79 @@
 {% extends "base.html" %}
-{% block title %}Réservés & Endommagés{% endblock %}
+{% block title %}Véhicules réservés{% endblock %}
 {% block body_attrs %}data-page="reserves"{% endblock %}
-{% block topbar_title %}Réservés &amp; <span style="color:var(--red)">Endommagés</span>{% endblock %}
+{% block topbar_title %}Véhicules <span style="color:var(--orange)">réservés</span>{% endblock %}
 {% block content %}
 
-<div class="rens-tabs">
-  <button class="tab-btn active" data-tab="reserve" onclick="switchTab('reserve')">Réservés</button>
-  <button class="tab-btn" data-tab="endommage" onclick="switchTab('endommage')">Endommagés</button>
+<div class="kpi-row">
+  <div class="kpi-box"><div class="kpi-val" id="qte-reserves" style="color:var(--orange)">—</div><div class="kpi-lbl">Véhicule(s) réservé(s) au total</div></div>
 </div>
 
 <div class="card">
   <div class="card-header"><div class="card-title">Filtres</div></div>
   <div style="padding:14px 18px;">
     <div class="form-grid" style="grid-template-columns:repeat(3,1fr);gap:10px;">
-      <div class="form-group" style="margin-bottom:0;"><label>Recherche</label><input type="text" id="f-recherche"></div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Recherche — par châssis ou modèle</label>
+        <input type="text" id="f-recherche" placeholder="Châssis (complet ou 6 derniers), modèle…">
+      </div>
       <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
-      <div class="form-group" style="margin-bottom:0;"><label>Emplacement</label><select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="margin-bottom:0;"><label>Modèle</label><select id="f-modele"><option value="">Tous</option></select></div>
     </div>
   </div>
 </div>
 
-<div class="tab-pane active" id="pane-reserve">
-  <div class="table-wrap card" style="overflow-x:auto;">
-    <table>
-      <thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Prix</th><th>Date entrée</th><th>Actions</th></tr></thead>
-      <tbody id="reserve-body"><tr><td colspan="7" class="empty-state">Chargement…</td></tr></tbody>
-    </table>
+<div class="table-wrap card" style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Origine</th><th>Motif de la réservation</th><th>Réservé le</th><th>Actions</th></tr>
+    </thead>
+    <tbody id="reserves-body"><tr><td colspan="7" class="empty-state">Chargement…</td></tr></tbody>
+  </table>
+</div>
+
+<!-- MODAL — Sortie vers showroom (depuis une réservation d'origine Parc) -->
+<div class="modal-bg" id="modal-sortie-reserve">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">SORTIE VERS SHOWROOM</div><button class="modal-close" onclick="closeModal('modal-sortie-reserve')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Date de sortie *</label><input type="date" id="sr-dateSortie" required></div>
+        <div class="form-group"><label>Destination *</label>
+          <select id="sr-destination" required>
+            <option value="">— Choisir —</option>
+            <option value="Showroom Douala">Showroom Douala</option>
+            <option value="Showroom Yaoundé">Showroom Yaoundé</option>
+            <option value="Showroom Bafoussam">Showroom Bafoussam</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Chauffeur *</label><input type="text" id="sr-chauffeur" required></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sortie-reserve')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerSortieReserve()">Confirmer la sortie</button>
+    </div>
   </div>
 </div>
 
-<div class="tab-pane" id="pane-endommage">
-  <div class="table-wrap card" style="overflow-x:auto;">
-    <table>
-      <thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Emplacement</th><th>Pièces endommagées</th><th>Actions</th></tr></thead>
-      <tbody id="endommage-body"><tr><td colspan="6" class="empty-state">Chargement…</td></tr></tbody>
-    </table>
+<!-- MODAL — Vente (depuis une réservation d'origine Showroom) -->
+<div class="modal-bg" id="modal-vente-reserve">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">VENTE DU VÉHICULE</div><button class="modal-close" onclick="closeModal('modal-vente-reserve')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Nom du client / entreprise *</label><input type="text" id="vr-clientNom" required></div>
+        <div class="form-group"><label>Contact</label><input type="text" id="vr-clientContact"></div>
+        <div class="form-group"><label>Date de vente *</label><input type="date" id="vr-dateVente" required></div>
+        <div class="form-group"><label>Prix de vente (FCFA) *</label><input type="number" id="vr-prix" min="0" required></div>
+        <div class="form-group"><label>Mode de paiement</label><input type="text" id="vr-modePaiement"></div>
+        <div class="form-group"><label>Vendeur / agent</label><input type="text" id="vr-vendeur"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-vente-reserve')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerVenteReserve()">Confirmer la vente</button>
+    </div>
   </div>
 </div>
 
