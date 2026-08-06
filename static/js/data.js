@@ -1,10 +1,19 @@
 import {
-  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef, authPrete,
+  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef, showroomRef, authPrete,
   doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
+  televerserFichier,
 } from "./firebase-config.js";
 
-export const STATUT_LABEL = { stock: "En stock", reserve: "Réservé", vendu: "Vendu", endommage: "Endommagé" };
-export const STATUT_BADGE = { stock: "badge-stock", reserve: "badge-reserve", vendu: "badge-vendu", endommage: "badge-endommage" };
+export { televerserFichier };
+
+export const STATUT_LABEL = {
+  stock: "En stock", reserve: "Réservé", vendu: "Vendu",
+  endommage: "Endommagé", prise_en_charge: "Prise en charge", repare: "Réparé",
+};
+export const STATUT_BADGE = {
+  stock: "badge-stock", reserve: "badge-reserve", vendu: "badge-vendu",
+  endommage: "badge-endommage", prise_en_charge: "badge-prise-en-charge", repare: "badge-repare",
+};
 
 // Modèles par marque (repris du projet Sky Gestion magasin) — partagé
 // entre le formulaire véhicule, les filtres Stock et le Tableau de bord.
@@ -12,7 +21,7 @@ export const MODELES_PAR_MARQUE = {
   "Jetour": ["X90 Plus", "X90 Plus 4x4", "X70 Plus", "Dashing", "Dashing 4x4", "T1", "T2", "G700", "X50 M", "X50 Auto"],
   "JMC": ["Vigus", "Grand Avenue"],
   "Soueast": ["S06", "S07", "S09"],
-  "Howo Sinotruk": ["Howo TX380"],
+  "Howo Sinotruk": ["Tracteur 6x4", "Tracteur 4x2", "Benne 6x4", "Benne 8x4", "Camionnette 12T", "7T Porteur 6x4"],
 };
 
 // Familles de modèles ayant plusieurs variantes de boîte de vitesses
@@ -169,6 +178,55 @@ export async function getVehicule(id) {
 // Un châssis (VIN) est normalisé en majuscules sans espaces superflus, pour
 // que la détection de doublon soit fiable qu'il soit saisi à la main ou
 // importé (évite qu'un "vf1..." et un "VF1..." soient vus comme différents).
+// Vérifie qu'une date au format YYYY-MM-DD correspond à un jour du
+// calendrier qui existe réellement (rejette par ex. "2026-02-30").
+function dateCalendaireValide(iso) {
+  const [y, m, j] = iso.split("-").map(Number);
+  if (!y || !m || !j) return false;
+  const d = new Date(iso + "T00:00:00");
+  return !isNaN(d) && d.getFullYear() === y && d.getMonth() + 1 === m && d.getDate() === j;
+}
+
+// Interprète une date saisie en texte libre (import CSV/Excel/PDF) et la
+// ramène au format YYYY-MM-DD, avec une VRAIE vérification de calendrier —
+// contrairement à une simple regex, qui accepterait sans broncher un
+// "12/23/2026" (23ᵉ mois) ou un "31/02/2026" (30 février) inexistants.
+//
+// Convention utilisée partout ailleurs dans l'appli : jour/mois/année. Si
+// cet ordre donne un mois impossible (ex. "12/23/2026" → mois 23) MAIS que
+// l'ordre inversé donne un calendrier valide (23/12/2026 → 23 décembre),
+// on comprend que les deux nombres sont inversés (fichier ou saisie au
+// format américain mois/jour) et on corrige automatiquement. Si AUCUN des
+// deux ordres ne donne de date réelle, la date est rejetée (chaîne vide)
+// plutôt que d'enregistrer une valeur fausse — la ligne sera alors
+// signalée comme incomplète dans l'aperçu d'import, à corriger à la main.
+export function normaliserDateTexte(v) {
+  const s = String(v || "").trim();
+  if (!s) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const iso = s.slice(0, 10);
+    return dateCalendaireValide(iso) ? iso : "";
+  }
+
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (!m) return "";
+  const brut1 = Number(m[1]);
+  const brut2 = Number(m[2]);
+  const anneeBrute = m[3];
+  const annee = anneeBrute.length === 2
+    ? (Number(anneeBrute) < 50 ? 2000 + Number(anneeBrute) : 1900 + Number(anneeBrute))
+    : Number(anneeBrute);
+
+  // [jour, mois] d'abord (convention de l'appli), puis inversé en secours.
+  for (const [jour, mois] of [[brut1, brut2], [brut2, brut1]]) {
+    if (mois < 1 || mois > 12 || jour < 1 || jour > 31) continue;
+    const iso = `${annee}-${String(mois).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
+    if (dateCalendaireValide(iso)) return iso;
+  }
+  return "";
+}
+
 export function normaliserChassis(c) {
   return (c || "").trim().toUpperCase();
 }
@@ -208,8 +266,19 @@ export async function retirerArrivageParChassis(chassis) {
   }
 }
 
+// Écoute en temps réel du stock d'équipements — à utiliser à la place d'un
+// chargement ponctuel (getDocs) partout où les quantités doivent se
+// mettre à jour automatiquement dès qu'un autre utilisateur modifie le
+// stock (page Équipements, mini-compteurs du Tableau de bord).
+export async function ecouterEquipementsStock(callback) {
+  await authPrete;
+  const q = query(equipementsRef, orderBy("nom"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
 // Ajuste le stock d'équipements (collection equipements_stock) selon la
-// différence entre l'ancien et le nouvel état de la checklist équipements
 // d'un véhicule — fonctionne aussi bien à la création (ancien = {}) qu'à
 // la modification (un équipement décoché rend son stock, un nouveau coché
 // ou une quantité augmentée le décompte). Prévient si le stock devient
@@ -267,31 +336,87 @@ export async function majVehicule(id, donnees) {
   }
 }
 
-// Sortie définitive d'un véhicule du parc : on ne supprime jamais
-// l'information, on l'archive dans vehicules_archives (avec toutes ses
-// infos + qui l'a sorti et quand) avant de le retirer du stock actif.
+// Transfert d'un véhicule du Stock Véhicule Parc vers le Stock Showroom
+// (destination : Douala / Yaoundé / Bafoussam) — ce n'est PAS une sortie
+// définitive : le véhicule reste vendable, simplement depuis le showroom.
+// Seul ce qui est décoché dans la checklist "matériel présent" à la sortie
+// est rendu au stock d'équipements ; le reste voyage avec le véhicule.
+export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
+  await authPrete;
+  const equipementsSortie = sortieInfo.equipements || vehiculeOriginal.equipements || {};
+  await ajusterStockEquipements(vehiculeOriginal.equipements || {}, equipementsSortie);
+  const { id, ...donnees } = vehiculeOriginal;
+  await addDoc(showroomRef, {
+    ...donnees,
+    equipements: equipementsSortie,
+    dateSortie: sortieInfo.dateSortie,
+    destination: sortieInfo.destination,
+    statut: "stock",
+    entreShowroomLe: serverTimestamp(),
+    entreShowroomPar: window.UTILISATEUR || "",
+  });
+  await deleteDoc(doc(db, "vehicules", id));
+  await enregistrerHistorique("Sortie vers showroom", { ...vehiculeOriginal, destination: sortieInfo.destination });
+}
+
+export async function ecouterShowroom(callback) {
+  await authPrete;
+  const q = query(showroomRef, orderBy("entreShowroomLe", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export async function majVehiculeShowroom(id, donnees) {
+  await authPrete;
+  donnees.misAJour = serverTimestamp();
+  donnees.misAJourPar = window.UTILISATEUR || "";
+  await updateDoc(doc(db, "vehicules_showroom", id), donnees);
+}
+
+// Renvoie un véhicule du Showroom vers le Stock Véhicule Parc (le matériel
+// reste avec le véhicule, aucun ajustement de stock).
+export async function remettreAuParc(vehiculeShowroom) {
+  await authPrete;
+  const { id, dateSortie, destination, entreShowroomLe, entreShowroomPar, ...donnees } = vehiculeShowroom;
+  await addDoc(vehiculesRef, { ...donnees, statut: "stock" });
+  await deleteDoc(doc(db, "vehicules_showroom", id));
+  await enregistrerHistorique("Retour au parc", vehiculeShowroom);
+}
+
+export async function supprimerVehiculeShowroomDefinitivement(vehicule) {
+  await authPrete;
+  await ajusterStockEquipements(vehicule.equipements || {}, {});
+  await deleteDoc(doc(db, "vehicules_showroom", vehicule.id));
+}
+
+// Vente d'un véhicule depuis le Showroom : bascule vers vehicules_archives
+// ("Véhicules vendus") avec les informations client. Le véhicule quitte
+// définitivement le Showroom.
+export async function vendreVehicule(vehiculeShowroom, infosVente) {
+  await authPrete;
+  const { id, ...donnees } = vehiculeShowroom;
+  await addDoc(archivesRef, {
+    ...donnees,
+    client: infosVente.client,
+    prix: infosVente.prix,
+    dateVente: infosVente.dateVente,
+    statut: "vendu",
+    sortiLe: serverTimestamp(),
+    sortiPar: window.UTILISATEUR || "",
+  });
+  await deleteDoc(doc(db, "vehicules_showroom", id));
+  await enregistrerHistorique("Vente", { ...vehiculeShowroom, statut: "vendu" });
+}
+
 // Suppression DÉFINITIVE d'un véhicule (Stock ou Endommagés) — contrairement
-// à supprimerVehicule (sortie du parc), celle-ci ne passe PAS par les
-// archives : le véhicule est retiré sans laisser de trace consultable.
-// À utiliser uniquement pour corriger une erreur de saisie, pas pour une
-// vraie sortie de parc (qui doit utiliser la Sortie du Stock véhicule).
+// à envoyerVersShowroom, celle-ci ne passe PAS par le Showroom : le
+// véhicule est retiré sans laisser de trace consultable. À utiliser
+// uniquement pour corriger une erreur de saisie.
 export async function supprimerVehiculeDefinitivement(vehicule) {
   await authPrete;
   await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
   await deleteDoc(doc(db, "vehicules", vehicule.id));
-}
-
-export async function supprimerVehicule(vehicule) {
-  await authPrete;
-  await ajusterStockEquipements(vehicule.equipementsAppliques || vehicule.equipements || {}, {});
-  const { id, ...donnees } = vehicule;
-  await addDoc(archivesRef, {
-    ...donnees,
-    sortiLe: serverTimestamp(),
-    sortiPar: window.UTILISATEUR || "",
-  });
-  await deleteDoc(doc(db, "vehicules", id));
-  await enregistrerHistorique("Sortie du parc", vehicule);
 }
 
 export async function ecouterArchives(callback) {
@@ -302,19 +427,32 @@ export async function ecouterArchives(callback) {
   });
 }
 
-// Remet un véhicule archivé de nouveau dans le stock actif.
-export async function restaurerArchive(archive) {
+// Annule une vente : renvoie le véhicule vers le Stock Showroom (là où il
+// était juste avant la vente), pas directement au Parc.
+export async function annulerVente(archive) {
   await authPrete;
-  const { id, sortiLe, sortiPar, ...donnees } = archive;
-  await creerVehicule(donnees);
+  const { id, sortiLe, sortiPar, client, prix, dateVente, statut, ...donnees } = archive;
+  await addDoc(showroomRef, {
+    ...donnees,
+    statut: "stock",
+    entreShowroomLe: serverTimestamp(),
+    entreShowroomPar: window.UTILISATEUR || "",
+  });
   await deleteDoc(doc(db, "vehicules_archives", id));
 }
 
-// Suppression DÉFINITIVE d'un véhicule archivé (efface l'historique de
-// sortie associé à cette fiche — irréversible).
+// Suppression DÉFINITIVE d'une fiche de vente (efface l'historique de
+// vente associé à cette fiche — irréversible).
 export async function supprimerArchive(id) {
   await authPrete;
   await deleteDoc(doc(db, "vehicules_archives", id));
+}
+
+// Corrige des informations sur une fiche déjà vendue (ex. vendeur, mode de
+// paiement) sans passer par une annulation de vente.
+export async function majArchive(id, donnees) {
+  await authPrete;
+  await updateDoc(doc(db, "vehicules_archives", id), donnees);
 }
 
 // ---------------------------------------------------------------
@@ -330,6 +468,8 @@ const LIBELLE_PAR_STATUT = {
   vendu: "Vente",
   reserve: "Réservation",
   endommage: "Mise en dommage",
+  prise_en_charge: "Prise en charge (réparation)",
+  repare: "Réparation confirmée",
   stock: "Remise en stock",
 };
 

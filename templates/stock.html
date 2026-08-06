@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Stock véhicule{% endblock %}
+{% block title %}Stock véhicule parc{% endblock %}
 {% block body_attrs %}data-page="stock"{% endblock %}
-{% block topbar_title %}Stock <span style="color:var(--red)">véhicule</span>{% endblock %}
+{% block topbar_title %}Stock <span style="color:var(--red)">véhicule parc</span>{% endblock %}
 {% block content %}
 
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
@@ -12,12 +12,9 @@
   <button class="btn btn-ghost" onclick="exporterTouteLaBase()">↓ Exporter toute la base</button>
 </div>
 
-<!-- Indicateurs par emplacement -->
+<!-- Quantité de véhicules présents dans le parc (tient compte des filtres) -->
 <div class="kpi-row" id="site-indicators">
-  <div class="site-card site-broli"><div class="kpi-val" id="site-broli">—</div><div class="kpi-lbl">Parc Broli</div></div>
-  <div class="site-card site-douala"><div class="kpi-val" id="site-douala">—</div><div class="kpi-lbl">Showroom Douala</div></div>
-  <div class="site-card site-yaounde"><div class="kpi-val" id="site-yaounde">—</div><div class="kpi-lbl">Showroom Yaoundé</div></div>
-  <div class="site-card site-bafoussam"><div class="kpi-val" id="site-bafoussam">—</div><div class="kpi-lbl">Showroom Bafoussam</div></div>
+  <div class="site-card site-broli"><div class="kpi-val" id="qte-parc-filtree">—</div><div class="kpi-lbl">Véhicules présents dans le parc (avec filtres)</div></div>
 </div>
 
 <!-- Filtres -->
@@ -26,8 +23,8 @@
   <div style="padding:14px 18px;">
     <div class="form-grid" style="grid-template-columns:repeat(6,1fr);gap:10px;">
       <div class="form-group" style="margin-bottom:0;">
-        <label>Recherche (nom, châssis, immat.)</label>
-        <input type="text" id="f-recherche" placeholder="6 derniers du châssis, modèle…">
+        <label>Recherche — par châssis, modèle ou immatriculation</label>
+        <input type="text" id="f-recherche" placeholder="Châssis (complet ou 6 derniers), modèle, immatriculation…">
       </div>
       <div class="form-group" style="margin-bottom:0;">
         <label>Marque</label>
@@ -64,7 +61,8 @@
   <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
     <span><b id="nb-selection">0</b> véhicule(s) sélectionné(s)</span>
     <button class="btn btn-ghost btn-sm" onclick="exporterSelectionCSV()">↓ Exporter la sélection (CSV)</button>
-    <button class="btn btn-red btn-sm" onclick="sortirSelectionDuParc()">Sortir la sélection du parc</button>
+    <button class="btn btn-red btn-sm" onclick="sortirSelectionDuParc()">Envoyer la sélection vers un showroom</button>
+    <button class="btn btn-ghost btn-sm" onclick="ouvrirModifMasse()">✎ Modifier la sélection</button>
     <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="supprimerSelectionVehicules()">🗑 Supprimer la sélection</button>
     <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
   </div>
@@ -112,18 +110,12 @@
           <div class="form-group"><label>Statut</label>
             <select id="v-statut" onchange="onStatutChange()">
               <option value="stock">En stock</option>
-              <option value="endommage">Endommagé</option>
+              <option value="reserve">Réservé</option>
             </select>
           </div>
           <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="v-prix" min="0"></div>
           <div class="form-group"><label>Kilométrage</label><input type="number" id="v-kilometrage" min="0"></div>
           <div class="form-group"><label>Date d'entrée</label><input type="date" id="v-dateEntree"></div>
-        </div>
-
-        <div id="section-dommages" style="display:none;">
-          <div class="divider"></div>
-          <div class="section-lbl">Pièces / parties endommagées</div>
-          <div class="form-group"><textarea id="v-pieces-endommagees" rows="3" placeholder="Ex : pare-choc avant, rétroviseur gauche, pare-brise…"></textarea></div>
         </div>
 
         <div class="divider"></div>
@@ -198,10 +190,67 @@
   </div>
 </div>
 
+<!-- MODAL — Signaler un dommage -->
+<div class="modal-bg" id="modal-dommage">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="dommage-modal-titre">SIGNALER UN DOMMAGE</div><button class="modal-close" onclick="closeModal('modal-dommage')">✕</button></div>
+    <div class="modal-body">
+      <form id="form-dommage">
+        <div class="form-group"><label>Pièce(s) / constat *</label><textarea id="d-constat" rows="3" required placeholder="Ex : pare-choc avant enfoncé, rétroviseur gauche cassé, pare-brise fissuré…"></textarea></div>
+        <div class="form-grid">
+          <div class="form-group"><label>Date du constat *</label><input type="date" id="d-dateConstat" required></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label>Photo du dommage (optionnel)</label><input type="file" id="d-photo" accept="image/*"></div>
+          <div class="form-group"><label>Vidéo du dommage — 30 secondes max (optionnel)</label><input type="file" id="d-video" accept="video/*"></div>
+        </div>
+        <div id="d-upload-statut" style="font-size:12px;color:var(--muted);"></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-dommage')">Annuler</button>
+      <button class="btn btn-red" id="d-btn-confirmer" onclick="confirmerDommage()">Signaler le dommage</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — Modification en masse -->
+<div class="modal-bg" id="modal-modif-masse">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modif-masse-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier. Seuls les champs renseignés seront appliqués à tous les véhicules sélectionnés.</div>
+      <form id="form-modif-masse">
+        <div class="form-grid">
+          <div class="form-group"><label>Statut</label>
+            <select id="mm-statut">
+              <option value="">Ne pas changer</option>
+              <option value="stock">En stock</option>
+              <option value="reserve">Réservé</option>
+              <option value="endommage">Endommagé</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Emplacement</label>
+            <select id="mm-emplacement">
+              <option value="">Ne pas changer</option>
+              {% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="mm-prix" min="0" placeholder="Laisser vide = ne pas changer"></div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-modif-masse')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerModifMasse()">Appliquer à la sélection</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — Sortie de véhicule du parc -->
 <div class="modal-bg" id="modal-sortie">
   <div class="modal">
-    <div class="modal-header"><div class="modal-title" id="sortie-modal-title">SORTIE DU PARC</div><button class="modal-close" onclick="closeModal('modal-sortie')">✕</button></div>
+    <div class="modal-header"><div class="modal-title" id="sortie-modal-title">SORTIE VERS SHOWROOM</div><button class="modal-close" onclick="closeModal('modal-sortie')">✕</button></div>
     <div class="modal-body">
       <form id="form-sortie">
         <div class="form-grid">
@@ -215,6 +264,7 @@
               <option value="Showroom Bafoussam">Showroom Bafoussam</option>
             </select>
           </div>
+          <div class="form-group"><label>Chauffeur (a conduit le véhicule) *</label><input type="text" id="s-chauffeur" required placeholder="Nom du chauffeur"></div>
         </div>
         <div id="s-equip-wrap" style="display:none;">
           <div class="divider"></div>

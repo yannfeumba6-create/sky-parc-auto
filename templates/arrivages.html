@@ -15,8 +15,9 @@
   <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
 </div>
 
-<!-- Indicateurs par emplacement prévu -->
+<!-- Indicateurs par emplacement prévu (tiennent compte des filtres marque/modèle) -->
 <div class="kpi-row" id="site-indicators">
+  <div class="kpi-box"><div class="kpi-val" id="qte-attendue">—</div><div class="kpi-lbl">Véhicule(s) attendu(s) au total</div></div>
   <div class="site-card site-broli"><div class="kpi-val" id="site-broli">—</div><div class="kpi-lbl">Parc Broli</div></div>
   <div class="site-card site-douala"><div class="kpi-val" id="site-douala">—</div><div class="kpi-lbl">Showroom Douala</div></div>
   <div class="site-card site-yaounde"><div class="kpi-val" id="site-yaounde">—</div><div class="kpi-lbl">Showroom Yaoundé</div></div>
@@ -29,8 +30,8 @@
   <div style="padding:14px 18px;">
     <div class="form-grid" style="grid-template-columns:repeat(6,1fr);gap:10px;">
       <div class="form-group" style="margin-bottom:0;">
-        <label>Recherche (nom, châssis, immat.)</label>
-        <input type="text" id="f-recherche" placeholder="6 derniers du châssis, modèle…">
+        <label>Recherche — par châssis ou modèle</label>
+        <input type="text" id="f-recherche" placeholder="Châssis (complet ou 6 derniers), modèle…">
       </div>
       <div class="form-group" style="margin-bottom:0;">
         <label>Marque</label>
@@ -70,8 +71,32 @@
       <input type="date" id="date-entree-groupee">
     </label>
     <button class="btn btn-red btn-sm" onclick="entrerSelectionEnStock()">Entrer la sélection en stock</button>
+    <button class="btn btn-ghost btn-sm" onclick="ouvrirModifMasseArrivages()">✎ Modifier la sélection</button>
     <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="supprimerSelectionArrivages()">🗑 Supprimer la sélection</button>
     <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
+  </div>
+</div>
+
+<!-- MODAL — Modification en masse -->
+<div class="modal-bg" id="modal-modif-masse-arrivages">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="mma-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse-arrivages')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier.</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Marque</label>
+          <select id="mma-marque"><option value="">Ne pas changer</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group"><label>Emplacement prévu</label>
+          <select id="mma-emplacement"><option value="">Ne pas changer</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group"><label>Date d'arrivée prévue</label><input type="date" id="mma-date"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-modif-masse-arrivages')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerModifMasseArrivages()">Appliquer à la sélection</button>
+    </div>
   </div>
 </div>
 

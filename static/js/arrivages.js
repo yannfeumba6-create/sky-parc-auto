@@ -2,7 +2,7 @@ import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
   entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
   importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
-  marqueCorrespond, modeleCorrespond,
+  marqueCorrespond, modeleCorrespond, normaliserDateTexte,
 } from "./data.js";
 
 let _arrivages = [];
@@ -61,9 +61,19 @@ function demarrerEcoute() {
   });
 }
 
+// Les indicateurs tiennent compte des filtres marque/modèle (mais pas des
+// autres filtres, sinon le filtre "Emplacement" masquerait les 3 autres
+// compteurs) — cohérent avec le Stock Showroom.
 function rendreIndicateurs() {
+  const marque = document.getElementById("f-marque").value;
+  const modele = document.getElementById("f-modele").value;
+  const base = _arrivages.filter((v) =>
+    (!marque || marqueCorrespond(v.marque, marque)) &&
+    (!modele || modeleCorrespond(v.marque, v.modele, modele))
+  );
+  document.getElementById("qte-attendue").textContent = base.length;
   Object.entries(SITE_KEYS).forEach(([site, id]) => {
-    const n = _arrivages.filter((v) => v.emplacement === site).length;
+    const n = base.filter((v) => v.emplacement === site).length;
     const el = document.getElementById(id);
     if (el) el.textContent = n;
   });
@@ -155,6 +165,10 @@ function rendreTableau() {
   document.getElementById(id).addEventListener("input", rendreTableau);
   document.getElementById(id).addEventListener("change", rendreTableau);
 });
+["f-marque", "f-modele"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", rendreIndicateurs);
+  document.getElementById(id).addEventListener("change", rendreIndicateurs);
+});
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);
 
 // ---------------------------------------------------------------
@@ -200,6 +214,44 @@ window.supprimerSelectionArrivages = async function () {
     await supprimerArrivage(id);
   }
   toast(`${ids.length} arrivage(s) supprimé(s)`);
+  _selection.clear();
+  rendreTableau();
+};
+
+// ---------------------------------------------------------------
+// Modification en masse — n'applique que les champs renseignés
+// ---------------------------------------------------------------
+
+window.ouvrirModifMasseArrivages = function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  document.getElementById("mma-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} arrivage(s)`;
+  document.getElementById("mma-marque").value = "";
+  document.getElementById("mma-emplacement").value = "";
+  document.getElementById("mma-date").value = "";
+  openModal("modal-modif-masse-arrivages");
+};
+
+window.confirmerModifMasseArrivages = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  const marque = document.getElementById("mma-marque").value;
+  const emplacement = document.getElementById("mma-emplacement").value;
+  const date = document.getElementById("mma-date").value;
+
+  const donnees = {};
+  if (marque) donnees.marque = marque;
+  if (emplacement) donnees.emplacement = emplacement;
+  if (date) donnees.dateArriveePrevue = date;
+
+  if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
+  if (!confirm(`Appliquer ces modifications à ${ids.length} arrivage(s) sélectionné(s) ?`)) return;
+
+  for (const id of ids) {
+    await majArrivage(id, { ...donnees });
+  }
+  toast(`${ids.length} arrivage(s) modifié(s)`);
+  closeModal("modal-modif-masse-arrivages");
   _selection.clear();
   rendreTableau();
 };
@@ -555,14 +607,10 @@ function detecterColonnesParEntete(entete) {
   return mapping;
 }
 
-// Convertit une date DD/MM/YYYY ou DD-MM-YYYY en YYYY-MM-DD ; laisse
-// intact ce qui est déjà au bon format ou non reconnu.
+// Convertit une date texte libre (import) en YYYY-MM-DD, avec vraie
+// validation de calendrier — voir normaliserDateTexte dans data.js.
 function normaliserDate(v) {
-  const s = String(v || "").trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-  return s;
+  return normaliserDateTexte(v);
 }
 
 function optionsDe(selectId) {

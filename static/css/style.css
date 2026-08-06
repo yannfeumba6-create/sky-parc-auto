@@ -414,6 +414,11 @@ tr.ligne-incomplete .import-cell{color:var(--red);}
 .badge-reserve{background:rgba(230,126,34,.12);color:var(--orange);}
 .badge-vendu{background:rgba(41,128,185,.12);color:var(--blue);}
 .badge-endommage{background:rgba(192,57,43,.12);color:var(--red);}
+.badge-prise-en-charge{background:rgba(230,126,34,.16);color:var(--orange);}
+.badge-repare{background:rgba(39,174,96,.16);color:var(--green);}
+.ligne-endommage{border-left:4px solid var(--red);}
+.ligne-prise-en-charge{border-left:4px solid var(--orange);}
+.ligne-repare{border-left:4px solid var(--green);}
 
 /* Indicateurs par emplacement — couleurs distinctes */
 .site-card{background:var(--surface);border:1.5px solid var(--border);border-left:5px solid var(--site-color,var(--red));border-radius:11px;padding:13px 16px;box-shadow:var(--shadow);}

@@ -101,6 +101,31 @@ window.supprimerSelectionHistorique = async function () {
   document.getElementById(id).addEventListener("change", rendre);
 });
 
+// ---------------------------------------------------------------
+// Export CSV / Excel / PDF
+// ---------------------------------------------------------------
+
+window.exporterCSV = function () {
+  const liste = filtres();
+  if (liste.length === 0) { toast("Aucune ligne à exporter", "tinfo"); return; }
+  const headers = ["Date", "Action", "Marque", "Modèle", "Châssis", "Statut", "Effectué par"];
+  const rows = liste.map((h) => {
+    const d = toDate(h.horodatage);
+    return [d ? d.toLocaleString("fr-FR") : "", h.action, h.marque, h.modele, h.chassis, STATUT_LABEL[h.statut] || h.statut, h.utilisateur];
+  });
+  exportCSV(`historique_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+};
+
+window.exporterPDF = function () {
+  const liste = filtres();
+  const rows = liste.map((h) => {
+    const d = toDate(h.horodatage);
+    return `<tr><td>${d ? d.toLocaleString("fr-FR") : "—"}</td><td>${esc(h.action) || "—"}</td><td>${esc(h.marque) || ""} ${esc(h.modele) || ""}</td><td>${esc(h.chassis) || "—"}</td><td>${esc(STATUT_LABEL[h.statut] || h.statut) || "—"}</td><td><b>${esc(h.utilisateur) || "—"}</b></td></tr>`;
+  }).join("");
+  document.getElementById("pdf-content").innerHTML = `<table><thead><tr><th>Date</th><th>Action</th><th>Véhicule</th><th>Châssis</th><th>Statut</th><th>Effectué par</th></tr></thead><tbody>${rows}</tbody></table>`;
+  printPDF("pdf-content", "Historique");
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   ecouterHistorique((liste) => { _historique = liste; rendre(); });
 });

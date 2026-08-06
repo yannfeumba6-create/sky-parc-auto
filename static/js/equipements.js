@@ -2,17 +2,18 @@ import {
   db, equipementsRef, authPrete,
   doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy,
 } from "./firebase-config.js";
+import { ecouterEquipementsStock } from "./data.js";
 
 let _equipements = [];
 const _selection = new Set();
 
-async function charger() {
-  await authPrete;
-  const q = query(equipementsRef, orderBy("nom"));
-  const snap = await getDocs(q);
-  _equipements = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+// Écoute temps réel : les quantités se mettent à jour automatiquement dès
+// qu'un autre utilisateur (ou une autre page — Stock véhicule, Sortie
+// vers showroom, etc.) modifie le stock, sans avoir à recharger la page.
+ecouterEquipementsStock((liste) => {
+  _equipements = liste;
   rendre();
-}
+});
 
 function rendre() {
   const tbody = document.getElementById("equip-body");
@@ -85,7 +86,28 @@ window.supprimerSelectionEquipements = async function () {
   }
   toast(`${ids.length} équipement(s) supprimé(s)`);
   _selection.clear();
-  charger();
+};
+
+window.ouvrirModifMasseEquip = function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  document.getElementById("mme-ppc").value = "";
+  openModal("modal-modif-masse-equip");
+};
+
+window.confirmerModifMasseEquip = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  const ppc = document.getElementById("mme-ppc").value;
+  if (ppc === "") { toast("Renseigne le nouveau conditionnement", "terr"); return; }
+  if (!confirm(`Appliquer ce conditionnement à ${ids.length} équipement(s) sélectionné(s) ?`)) return;
+  await authPrete;
+  for (const id of ids) {
+    await updateDoc(doc(db, "equipements_stock", id), { piecesParCarton: Number(ppc) });
+  }
+  toast(`${ids.length} équipement(s) modifié(s)`);
+  closeModal("modal-modif-masse-equip");
+  _selection.clear();
 };
 
 // ---------------------------------------------------------------
@@ -122,7 +144,6 @@ window.creerEquipement = async function () {
   document.getElementById("ne-nom-libre").value = "";
   document.getElementById("ne-cartons").value = 0;
   document.getElementById("ne-unites").value = 0;
-  charger();
 };
 
 window.chargerBase = async function () {
@@ -133,7 +154,6 @@ window.chargerBase = async function () {
     if (!existe) await addDoc(equipementsRef, { nom: e.nom, piecesParCarton: e.piecesParCarton, stockPieces: 0 });
   }
   toast("Équipements de base ajoutés");
-  charger();
 };
 
 // ---------------------------------------------------------------
@@ -159,7 +179,7 @@ document.addEventListener("click", (e) => {
 
   if (action === "supprimer") {
     if (!confirm(`Supprimer "${equip.nom}" du stock d'équipements ?`)) return;
-    authPrete.then(() => deleteDoc(doc(db, "equipements_stock", id))).then(() => { toast("Équipement supprimé"); charger(); });
+    authPrete.then(() => deleteDoc(doc(db, "equipements_stock", id))).then(() => { toast("Équipement supprimé"); });
   }
 });
 
@@ -188,7 +208,5 @@ window.validerMouvementStock = async function () {
   await updateDoc(doc(db, "equipements_stock", id), { stockPieces: nouveauStock });
   toast("Stock mis à jour");
   closeModal("modal-stock-equip");
-  charger();
 };
 
-document.addEventListener("DOMContentLoaded", charger);

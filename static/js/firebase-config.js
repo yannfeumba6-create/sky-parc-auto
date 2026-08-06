@@ -27,6 +27,9 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBp6ooHJy2mZRonNtiKHdZJSR2FENUld-E",
@@ -43,12 +46,23 @@ const authInstance = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
 });
+const storage = getStorage(app);
+
+// Envoie un fichier (photo ou vidéo de constat de dommage) vers Firebase
+// Storage et renvoie son URL de téléchargement, à enregistrer dans le
+// document Firestore du véhicule.
+export async function televerserFichier(chemin, fichier) {
+  const r = storageRef(storage, chemin);
+  await uploadBytes(r, fichier);
+  return getDownloadURL(r);
+}
 
 export const vehiculesRef = collection(db, "vehicules");
 export const historiqueRef = collection(db, "historique");
 export const equipementsRef = collection(db, "equipements_stock");
 export const arrivagesRef = collection(db, "prochains_arrivages");
 export const archivesRef = collection(db, "vehicules_archives");
+export const showroomRef = collection(db, "vehicules_showroom");
 
 // ---------------------------------------------------------------
 // Connexion à Firebase — le mot de passe est déjà vérifié côté serveur

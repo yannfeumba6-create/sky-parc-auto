@@ -152,6 +152,17 @@ def stock():
     )
 
 
+@app.route("/showroom")
+@login_required
+def showroom():
+    return render_template(
+        "showroom.html",
+        marques=MARQUES,
+        emplacements=EMPLACEMENTS,
+        active_page="showroom",
+    )
+
+
 @app.route("/vendus")
 @login_required
 def vendus():
@@ -206,16 +217,6 @@ def arrivages():
         emplacements=EMPLACEMENTS,
         equipements=EQUIPEMENTS_REFERENCE,
         active_page="arrivages",
-    )
-
-
-@app.route("/archives")
-@login_required
-def archives():
-    return render_template(
-        "archives.html",
-        marques=MARQUES,
-        active_page="archives",
     )
 
 

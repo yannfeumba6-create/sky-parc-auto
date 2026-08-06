@@ -11,11 +11,34 @@
   <button class="btn btn-ghost btn-sm" data-download="{{ prefix }}" title="Télécharger en image">⬇ Image</button>
 </div>
 {% endmacro %}
+{% macro filtres_ville(prefix) %}
+<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+  <select id="{{ prefix }}-marque" class="filtre-mini"><option value="">Toutes marques</option></select>
+  <select id="{{ prefix }}-modele" class="filtre-mini"><option value="">Tous modèles</option></select>
+  <select id="{{ prefix }}-ville" class="filtre-mini">
+    <option value="">Toutes villes</option>
+    <option value="Showroom Douala">Douala</option>
+    <option value="Showroom Yaoundé">Yaoundé</option>
+    <option value="Showroom Bafoussam">Bafoussam</option>
+  </select>
+  <button class="btn btn-ghost btn-sm" data-download="{{ prefix }}" title="Télécharger en image">⬇ Image</button>
+</div>
+{% endmacro %}
 
 <div class="kpi-row">
-  <div class="kpi-box"><div class="kpi-val" id="kpi-parc">—</div><div class="kpi-lbl">Véhicules dans le parc</div></div>
+  <div class="kpi-box"><div class="kpi-val" id="kpi-parc">—</div><div class="kpi-lbl">Véhicules au parc</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:var(--blue)" id="kpi-showroom">—</div><div class="kpi-lbl">En showroom (total)</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:var(--orange)" id="kpi-reserve">—</div><div class="kpi-lbl">Réservés</div></div>
   <div class="kpi-box"><div class="kpi-val" style="color:var(--red)" id="kpi-endommage">—</div><div class="kpi-lbl">Endommagés</div></div>
+  <div class="kpi-box"><div class="kpi-val" style="color:#27ae60" id="kpi-vendu">—</div><div class="kpi-lbl">Vendus (total)</div></div>
   <div class="kpi-box"><div class="kpi-val" style="color:#8e44ad;font-size:20px;" id="kpi-valeur-stock">—</div><div class="kpi-lbl">Valeur totale du stock</div></div>
+</div>
+
+<!-- Répartition du showroom par ville -->
+<div class="kpi-row">
+  <div class="site-card site-douala"><div class="kpi-val" id="kpi-showroom-douala">—</div><div class="kpi-lbl">Showroom Douala</div></div>
+  <div class="site-card site-yaounde"><div class="kpi-val" id="kpi-showroom-yaounde">—</div><div class="kpi-lbl">Showroom Yaoundé</div></div>
+  <div class="site-card site-bafoussam"><div class="kpi-val" id="kpi-showroom-bafoussam">—</div><div class="kpi-lbl">Showroom Bafoussam</div></div>
 </div>
 
 <div class="card">
@@ -24,6 +47,22 @@
     {{ filtres('flux') }}
   </div>
   <div style="padding:14px;height:220px"><canvas id="chart-flux"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Évolution des <span>ventes</span> sur l'année</div>
+    {{ filtres_ville('ventes') }}
+  </div>
+  <div style="padding:14px;height:220px"><canvas id="chart-ventes"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Classement des <span>meilleurs clients</span> — entreprises ou particuliers (sur l'année)</div>
+    {{ filtres_ville('top') }}
+  </div>
+  <div style="padding:14px 18px" id="top-clients-list">Chargement…</div>
 </div>
 
 <div class="card">

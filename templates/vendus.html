@@ -5,19 +5,25 @@
 {% block content %}
 
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-  <button class="btn btn-ghost" onclick="exporterCSV()">↓ CSV</button>
+  <button class="btn btn-ghost" onclick="exporterCSV()">↓ Excel / CSV (filtré)</button>
   <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
 </div>
 
 <div class="card">
   <div class="card-header"><div class="card-title">Filtres</div></div>
   <div style="padding:14px 18px;">
-    <div class="form-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;">
-      <div class="form-group" style="margin-bottom:0;"><label>Recherche (client, châssis, modèle)</label><input type="text" id="f-recherche"></div>
-      <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
-      <div class="form-group" style="margin-bottom:0;"><label>Emplacement</label><select id="f-emplacement"><option value="">Tous</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select></div>
+    <div class="form-grid" style="grid-template-columns:repeat(5,1fr);gap:10px;">
       <div class="form-group" style="margin-bottom:0;">
-        <label>Période (date d'achat)</label>
+        <label>Recherche — par client, châssis ou modèle</label>
+        <input type="text" id="f-recherche" placeholder="Nom du client, châssis, modèle…">
+      </div>
+      <div class="form-group" style="margin-bottom:0;"><label>Marque</label><select id="f-marque"><option value="">Toutes</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Ville (showroom)</label>
+        <select id="f-ville"><option value="">Toutes</option><option value="Showroom Douala">Douala</option><option value="Showroom Yaoundé">Yaoundé</option><option value="Showroom Bafoussam">Bafoussam</option></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Période (date de vente)</label>
         <select id="f-periode">
           <option value="">Toutes</option>
           <option value="jour">Aujourd'hui</option>
@@ -26,6 +32,7 @@
           <option value="trimestre">Ce trimestre</option>
         </select>
       </div>
+      <div class="form-group" style="margin-bottom:0;"><label>Année de vente</label><input type="number" id="f-annee" placeholder="ex. 2026"></div>
     </div>
   </div>
 </div>
@@ -35,12 +42,39 @@
   <div style="padding:14px 18px;" id="clients-liste">Chargement…</div>
 </div>
 
+<div class="card" id="barre-selection" style="display:none;margin-bottom:16px;">
+  <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span><b id="nb-selection">0</b> véhicule(s) sélectionné(s)</span>
+    <button class="btn btn-ghost btn-sm" onclick="ouvrirModifMasseVendus()">✎ Modifier la sélection</button>
+    <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="supprimerSelectionVendus()">🗑 Supprimer définitivement la sélection</button>
+    <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
+  </div>
+</div>
+
+<!-- MODAL — Modification en masse -->
+<div class="modal-bg" id="modal-modif-masse-vendus">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="mmv-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse-vendus')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide pour ne pas le modifier.</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Vendeur / agent</label><input type="text" id="mmv-vendeur" placeholder="Laisser vide = ne pas changer"></div>
+        <div class="form-group"><label>Mode de paiement</label><input type="text" id="mmv-modePaiement" placeholder="Laisser vide = ne pas changer"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-modif-masse-vendus')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerModifMasseVendus()">Appliquer à la sélection</button>
+    </div>
+  </div>
+</div>
+
 <div class="table-wrap card" style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Client</th><th>Contact</th><th>Date entrée</th><th>Date sortie</th><th>Prix</th><th>Actions</th></tr>
+      <tr><th><input type="checkbox" id="select-all"></th><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Ville</th><th>Client</th><th>Contact</th><th>Date d'entrée</th><th>Date de vente</th><th>Prix</th><th>Actions</th></tr>
     </thead>
-    <tbody id="vendus-body"><tr><td colspan="9" class="empty-state">Chargement…</td></tr></tbody>
+    <tbody id="vendus-body"><tr><td colspan="11" class="empty-state">Chargement…</td></tr></tbody>
   </table>
 </div>
 

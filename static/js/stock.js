@@ -1,7 +1,8 @@
 import {
-  ecouterVehicules, creerVehicule, majVehicule, getVehicule, supprimerVehicule, supprimerVehiculeDefinitivement,
+  ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
-  importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond,
+  importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond, normaliserDateTexte,
+  televerserFichier,
 } from "./data.js";
 
 let _vehicules = [];
@@ -41,13 +42,6 @@ function rafraichirListeCouleurs() {
   dl.innerHTML = couleursConnues().map((c) => `<option value="${c}"></option>`).join("");
 }
 
-const SITE_KEYS = {
-  "Parc Broli": "site-broli",
-  "Showroom Douala": "site-douala",
-  "Showroom Yaoundé": "site-yaounde",
-  "Showroom Bafoussam": "site-bafoussam",
-};
-
 function rendreTout() {
   rendreIndicateurs();
   rendreTableau();
@@ -60,12 +54,14 @@ function demarrerEcoute() {
   });
 }
 
+// N'affiche que la quantité de véhicules PRÉSENTS DANS LE PARC — donc en
+// tenant compte des filtres actifs (marque, modèle, emplacement…) et en
+// excluant les véhicules endommagés / en prise en charge / réparés (ils
+// sont sortis de ce volet, direction Endommagés, jusqu'à confirmation de
+// la réparation et remise en stock manuelle).
 function rendreIndicateurs() {
-  Object.entries(SITE_KEYS).forEach(([site, id]) => {
-    const n = _vehicules.filter((v) => v.emplacement === site).length;
-    const el = document.getElementById(id);
-    if (el) el.textContent = n;
-  });
+  const el = document.getElementById("qte-parc-filtree");
+  if (el) el.textContent = vehiculesFiltres().length;
 }
 
 function dansPeriode(dateStr, periode) {
@@ -101,6 +97,7 @@ function vehiculesFiltres() {
   const periode = document.getElementById("f-periode").value;
 
   return _vehicules.filter((v) => {
+    if (["endommage", "prise_en_charge", "repare"].includes(v.statut)) return false;
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
     if (emplacement && v.emplacement !== emplacement) return false;
@@ -151,9 +148,11 @@ function ligneTableau(v) {
       <td>${esc(v.dateEntree) || "—"}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" data-action="modifier" data-id="${v.id}">✎</button>
+        ${v.statut === "stock" ? `<button class="btn btn-ghost btn-sm" data-action="reserver" data-id="${v.id}">Réserver</button>` : ""}
+        ${v.statut === "reserve" ? `<button class="btn btn-ghost btn-sm" data-action="lever-reserve" data-id="${v.id}">Lever réservation</button>` : ""}
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
-        <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie</button>
+        <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie vers showroom</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
       </td>
     </tr>`;
@@ -228,7 +227,7 @@ window.sortirSelectionDuParc = function () {
 window.supprimerSelectionVehicules = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-  if (!confirm(`Supprimer définitivement ${ids.length} véhicule(s) sélectionné(s) ? Cette action est irréversible et ne passe pas par les archives.`)) return;
+  if (!confirm(`Supprimer définitivement ${ids.length} véhicule(s) sélectionné(s) ? Cette action est irréversible et ne passe pas par le Showroom.`)) return;
   let n = 0;
   for (const id of ids) {
     const v = _vehicules.find((x) => x.id === id);
@@ -239,12 +238,48 @@ window.supprimerSelectionVehicules = async function () {
 };
 
 // ---------------------------------------------------------------
+// Modification en masse — n'applique que les champs renseignés
+// ---------------------------------------------------------------
+
+window.ouvrirModifMasse = function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  document.getElementById("modif-masse-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} véhicule(s)`;
+  document.getElementById("mm-statut").value = "";
+  document.getElementById("mm-emplacement").value = "";
+  document.getElementById("mm-prix").value = "";
+  openModal("modal-modif-masse");
+};
+
+window.confirmerModifMasse = async function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  const statut = document.getElementById("mm-statut").value;
+  const emplacement = document.getElementById("mm-emplacement").value;
+  const prix = document.getElementById("mm-prix").value;
+
+  const donnees = {};
+  if (statut) donnees.statut = statut;
+  if (emplacement) donnees.emplacement = emplacement;
+  if (prix !== "") donnees.prix = Number(prix);
+
+  if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
+  if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
+
+  for (const id of ids) {
+    await majVehicule(id, { ...donnees });
+  }
+  toast(`${ids.length} véhicule(s) modifié(s)`);
+  closeModal("modal-modif-masse");
+  _selection.clear();
+};
+
+// ---------------------------------------------------------------
 // Modal véhicule — ouverture / pré-remplissage / sauvegarde
 // ---------------------------------------------------------------
 
 window.onStatutChange = function () {
-  const statut = document.getElementById("v-statut").value;
-  document.getElementById("section-dommages").style.display = statut === "endommage" ? "block" : "none";
+  // Le statut "endommage" ne se règle plus ici : voir Signaler un dommage.
 };
 
 function viderFormulaire() {
@@ -275,7 +310,6 @@ async function ouvrirEdition(id, statutForce) {
   set("v-emplacement", v.emplacement); set("v-statut", statutForce || v.statut);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
   set("v-dateEntree", v.dateEntree);
-  if (v.piecesEndommagees) document.getElementById("v-pieces-endommagees").value = v.piecesEndommagees;
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
       const cb = document.querySelector(`[data-equip="${nom}"]`);
@@ -326,10 +360,6 @@ window.enregistrerVehicule = async function () {
     return;
   }
 
-  if (statut === "endommage") {
-    donnees.piecesEndommagees = document.getElementById("v-pieces-endommagees").value.trim();
-  }
-
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
 
@@ -350,11 +380,16 @@ document.addEventListener("click", async (e) => {
   const { action, id } = btn.dataset;
 
   if (action === "modifier") return ouvrirEdition(id);
+  if (action === "reserver") {
+    await majVehicule(id, { statut: "reserve" });
+    toast("Véhicule réservé (client a déjà acheté mais le véhicule reste au parc)");
+  }
+  if (action === "lever-reserve") {
+    await majVehicule(id, { statut: "stock" });
+    toast("Réservation levée");
+  }
   if (action === "endommager") {
-    const pieces = prompt("Quelles pièces / parties sont endommagées ?");
-    if (pieces === null) return;
-    await majVehicule(id, { statut: "endommage", piecesEndommagees: pieces });
-    toast("Véhicule marqué endommagé");
+    ouvrirModalDommage(id);
   }
   if (action === "sortir") {
     ouvrirModalSortie(id);
@@ -362,7 +397,7 @@ document.addEventListener("click", async (e) => {
   if (action === "supprimer") {
     const v = _vehicules.find((x) => x.id === id);
     if (!v) return;
-    if (!confirm(`Supprimer définitivement "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ? Cette action est irréversible et ne passe pas par les archives.`)) return;
+    if (!confirm(`Supprimer définitivement "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ? Cette action est irréversible et ne passe pas par le Showroom.`)) return;
     await supprimerVehiculeDefinitivement(v);
     toast("Véhicule supprimé");
   }
@@ -383,9 +418,10 @@ document.addEventListener("click", async (e) => {
 });
 
 // ---------------------------------------------------------------
-// Sortie de véhicule du parc — date de sortie, destination et
-// matériel présent obligatoires. Le véhicule est archivé (jamais
-// supprimé) via supprimerVehicule, avec ces informations en plus.
+// Sortie de véhicule vers un showroom — date de sortie, destination et
+// matériel présent obligatoires. Le véhicule n'est jamais supprimé, il
+// est transféré vers le Stock Showroom (envoyerVersShowroom), où il
+// reste vendable.
 // ---------------------------------------------------------------
 
 let _sortieCible = null; // { type: "single", id } ou { type: "bulk", ids: [...] }
@@ -420,9 +456,10 @@ function ouvrirModalSortie(id) {
   const v = _vehicules.find((x) => x.id === id);
   if (!v) return;
   _sortieCible = { type: "single", id };
-  document.getElementById("sortie-modal-title").textContent = `SORTIE DU PARC — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("sortie-modal-title").textContent = `SORTIE VERS SHOWROOM — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
   document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
   document.getElementById("s-destination").value = "";
+  document.getElementById("s-chauffeur").value = "";
   document.getElementById("s-equip-wrap").style.display = "block";
   remplirEquipGridSortie(v);
   openModal("modal-sortie");
@@ -430,9 +467,10 @@ function ouvrirModalSortie(id) {
 
 function ouvrirModalSortieBulk(ids) {
   _sortieCible = { type: "bulk", ids };
-  document.getElementById("sortie-modal-title").textContent = `SORTIE DU PARC — ${ids.length} véhicule(s) sélectionné(s)`;
+  document.getElementById("sortie-modal-title").textContent = `SORTIE VERS SHOWROOM — ${ids.length} véhicule(s) sélectionné(s)`;
   document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
   document.getElementById("s-destination").value = "";
+  document.getElementById("s-chauffeur").value = "";
   document.getElementById("s-equip-wrap").style.display = "none";
   openModal("modal-sortie");
 }
@@ -440,28 +478,116 @@ function ouvrirModalSortieBulk(ids) {
 window.confirmerSortie = async function () {
   const dateSortie = document.getElementById("s-dateSortie").value;
   const destination = document.getElementById("s-destination").value;
+  const chauffeur = document.getElementById("s-chauffeur").value.trim();
   if (!dateSortie) { toast("La date de sortie est obligatoire", "terr"); return; }
   if (!destination) { toast("La destination est obligatoire", "terr"); return; }
+  if (!chauffeur) { toast("Le nom du chauffeur est obligatoire", "terr"); return; }
   if (!_sortieCible) return;
 
   if (_sortieCible.type === "single") {
     const v = _vehicules.find((x) => x.id === _sortieCible.id);
     if (!v) return;
     const equipements = lireEquipementsSortie();
-    await supprimerVehicule({ ...v, dateSortie, destination, equipements });
-    toast("Véhicule sorti du parc");
+    await envoyerVersShowroom(v, { dateSortie, destination, chauffeur, equipements });
+    toast("Véhicule envoyé vers le Showroom");
   } else {
     let n = 0;
     for (const id of _sortieCible.ids) {
       const v = _vehicules.find((x) => x.id === id);
-      if (v) { await supprimerVehicule({ ...v, dateSortie, destination }); n++; }
+      if (v) { await envoyerVersShowroom(v, { dateSortie, destination, chauffeur }); n++; }
     }
-    toast(`${n} véhicule(s) sorti(s) du parc`);
+    toast(`${n} véhicule(s) envoyé(s) vers le Showroom`);
     _selection.clear();
   }
 
   closeModal("modal-sortie");
   _sortieCible = null;
+};
+
+// ---------------------------------------------------------------
+// Signaler un dommage — constat obligatoire, date obligatoire, photo et
+// vidéo (30 s max) facultatives. Une fois signalé, le véhicule quitte
+// immédiatement ce volet (Stock véhicule parc) pour le sous-volet
+// Endommagés, où il apparaît en ROUGE.
+// ---------------------------------------------------------------
+
+let _dommageCible = null;
+
+// Vérifie la durée d'une vidéo côté navigateur avant tout envoi.
+function dureeVideo(fichier) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(v.duration); };
+    v.onerror = () => { URL.revokeObjectURL(v.src); reject(new Error("Vidéo illisible")); };
+    v.src = URL.createObjectURL(fichier);
+  });
+}
+
+function ouvrirModalDommage(id) {
+  const v = _vehicules.find((x) => x.id === id);
+  if (!v) return;
+  _dommageCible = id;
+  document.getElementById("dommage-modal-titre").textContent = `SIGNALER UN DOMMAGE — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("d-constat").value = "";
+  document.getElementById("d-dateConstat").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("d-photo").value = "";
+  document.getElementById("d-video").value = "";
+  document.getElementById("d-upload-statut").textContent = "";
+  openModal("modal-dommage");
+}
+
+window.confirmerDommage = async function () {
+  const v = _vehicules.find((x) => x.id === _dommageCible);
+  if (!v) return;
+  const constat = document.getElementById("d-constat").value.trim();
+  const dateConstat = document.getElementById("d-dateConstat").value;
+  if (!constat) { toast("Le constat est obligatoire", "terr"); return; }
+  if (!dateConstat) { toast("La date du constat est obligatoire", "terr"); return; }
+
+  const photo = document.getElementById("d-photo").files[0];
+  const video = document.getElementById("d-video").files[0];
+  const statutEl = document.getElementById("d-upload-statut");
+  const btn = document.getElementById("d-btn-confirmer");
+
+  if (video) {
+    try {
+      const duree = await dureeVideo(video);
+      if (duree > 30.5) { toast("La vidéo dépasse 30 secondes — raccourcis-la avant de l'envoyer", "terr"); return; }
+    } catch {
+      toast("Impossible de lire cette vidéo", "terr");
+      return;
+    }
+  }
+
+  btn.disabled = true;
+  const donnees = {
+    statut: "endommage",
+    piecesEndommagees: constat,
+    dateConstat,
+  };
+
+  try {
+    if (photo) {
+      statutEl.textContent = "Envoi de la photo…";
+      donnees.photoDommageURL = await televerserFichier(`dommages/${v.id}/${Date.now()}_${photo.name}`, photo);
+    }
+    if (video) {
+      statutEl.textContent = "Envoi de la vidéo…";
+      donnees.videoDommageURL = await televerserFichier(`dommages/${v.id}/${Date.now()}_${video.name}`, video);
+    }
+  } catch (e) {
+    btn.disabled = false;
+    statutEl.textContent = "";
+    toast("Échec de l'envoi du fichier : " + e.message, "terr");
+    return;
+  }
+
+  await majVehicule(v.id, donnees);
+  btn.disabled = false;
+  toast("Dommage signalé — véhicule transféré vers Endommagés");
+  closeModal("modal-dommage");
+  _dommageCible = null;
 };
 
 // ---------------------------------------------------------------
@@ -616,11 +742,7 @@ function detecterColonnesParEntete(entete) {
 }
 
 function normaliserDate(v) {
-  const s = String(v || "").trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-  return s;
+  return normaliserDateTexte(v);
 }
 
 function optionsDe(selectId) {
