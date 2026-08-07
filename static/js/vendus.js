@@ -1,4 +1,4 @@
-import { ecouterArchives, annulerVente, supprimerArchive, majArchive, chassis6, marqueCorrespond } from "./data.js";
+import { ecouterArchives, annulerVente, supprimerArchive, majArchive, corrigerFichesMalClasseesVendus, chassis6, marqueCorrespond } from "./data.js";
 
 let _vendus = [];
 const _selection = new Set();
@@ -247,6 +247,13 @@ window.exporterPDF = function () {
   const rows = liste.map((v) => `<tr><td>${esc(chassis6(v.chassis))}</td><td>${esc(v.marque) || "—"}</td><td>${esc(v.modele) || "—"}</td><td>${esc(v.client?.nom) || "—"}</td><td>${esc(v.dateEntree) || "—"}</td><td>${esc(dateVenteDe(v)) || "—"}</td><td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td></tr>`).join("");
   document.getElementById("pdf-content").innerHTML = `<table><thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Client</th><th>Entrée</th><th>Vente</th><th>Prix</th></tr></thead><tbody>${rows}</tbody></table>`;
   printPDF("pdf-content", "Véhicules Vendus");
+};
+
+window.corrigerFichesMalClassees = async function () {
+  if (!confirm("Vérifier toutes les fiches de « Véhicules vendus » et renvoyer automatiquement vers le Stock Showroom celles qui n'ont pas d'informations de vente complètes (client, prix, date) ? Utile pour corriger les véhicules envoyés en showroom avant la mise à jour.")) return;
+  const n = await corrigerFichesMalClasseesVendus();
+  if (n === 0) toast("Aucune fiche à corriger — tout est correct");
+  else toast(`${n} fiche(s) renvoyée(s) vers le Stock Showroom`);
 };
 
 document.addEventListener("DOMContentLoaded", () => {

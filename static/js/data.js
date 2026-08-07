@@ -394,20 +394,26 @@ export async function supprimerVehiculeShowroomDefinitivement(vehicule) {
 // Vente d'un véhicule depuis le Showroom : bascule vers vehicules_archives
 // ("Véhicules vendus") avec les informations client. Le véhicule quitte
 // définitivement le Showroom.
-export async function vendreVehicule(vehiculeShowroom, infosVente) {
+// Vente d'un véhicule — possible directement depuis le Stock véhicule parc
+// OU depuis le Stock Showroom. `collectionOrigine` indique d'où le
+// véhicule est retiré ("vehicules" = Parc, "vehicules_showroom" =
+// Showroom), et est mémorisé sur la fiche (origineVente) pour qu'une
+// éventuelle annulation de vente sache où le renvoyer.
+export async function vendreVehicule(vehicule, infosVente, collectionOrigine = "vehicules_showroom") {
   await authPrete;
-  const { id, ...donnees } = vehiculeShowroom;
+  const { id, ...donnees } = vehicule;
   await addDoc(archivesRef, {
     ...donnees,
     client: infosVente.client,
     prix: infosVente.prix,
     dateVente: infosVente.dateVente,
     statut: "vendu",
+    origineVente: collectionOrigine === "vehicules" ? "parc" : "showroom",
     sortiLe: serverTimestamp(),
     sortiPar: window.UTILISATEUR || "",
   });
-  await deleteDoc(doc(db, "vehicules_showroom", id));
-  await enregistrerHistorique("Vente", { ...vehiculeShowroom, statut: "vendu" });
+  await deleteDoc(doc(db, collectionOrigine, id));
+  await enregistrerHistorique("Vente", { ...vehicule, statut: "vendu" });
 }
 
 // Suppression DÉFINITIVE d'un véhicule (Stock ou Endommagés) — contrairement
@@ -430,16 +436,56 @@ export async function ecouterArchives(callback) {
 
 // Annule une vente : renvoie le véhicule vers le Stock Showroom (là où il
 // était juste avant la vente), pas directement au Parc.
+// Annule une vente : renvoie le véhicule là où il était AVANT la vente —
+// au Stock véhicule parc si la vente avait été faite directement depuis
+// le parc, ou au Stock Showroom si elle avait été faite depuis un
+// showroom. Pour les fiches d'avant cette distinction (sans
+// origineVente enregistrée), on déduit depuis la présence d'une
+// destination (Douala/Yaoundé/Bafoussam) = showroom, sinon = parc.
 export async function annulerVente(archive) {
   await authPrete;
-  const { id, sortiLe, sortiPar, client, prix, dateVente, statut, ...donnees } = archive;
-  await addDoc(showroomRef, {
-    ...donnees,
-    statut: "stock",
-    entreShowroomLe: serverTimestamp(),
-    entreShowroomPar: window.UTILISATEUR || "",
-  });
+  const { id, sortiLe, sortiPar, client, prix, dateVente, statut, origineVente, ...donnees } = archive;
+  const origine = origineVente || (donnees.destination ? "showroom" : "parc");
+
+  if (origine === "parc") {
+    await addDoc(vehiculesRef, { ...donnees, statut: "stock" });
+  } else {
+    await addDoc(showroomRef, {
+      ...donnees,
+      statut: "stock",
+      entreShowroomLe: serverTimestamp(),
+      entreShowroomPar: window.UTILISATEUR || "",
+    });
+  }
   await deleteDoc(doc(db, "vehicules_archives", id));
+}
+
+// Corrige les anciennes fiches présentes dans "Véhicules vendus" alors
+// qu'elles n'ont en réalité jamais été vendues — cas des véhicules
+// envoyés vers un showroom AVANT que le Stock Showroom n'existe comme
+// étape séparée, qui atterrissaient directement dans les archives. Une
+// fiche sans nom de client + prix + date de vente n'est pas une vraie
+// vente : elle est renvoyée vers le Stock Showroom (avec sa destination
+// déjà connue), pour pouvoir être vendue normalement depuis là-bas.
+export async function corrigerFichesMalClasseesVendus() {
+  await authPrete;
+  const snap = await getDocs(archivesRef);
+  let n = 0;
+  for (const d of snap.docs) {
+    const v = { id: d.id, ...d.data() };
+    const venteReelle = v.client && v.client.nom && v.prix && (v.dateVente || v.client.dateAchat);
+    if (venteReelle) continue;
+    const { id, sortiLe, sortiPar, client, prix, dateVente, statut, origineVente, ...donnees } = v;
+    await addDoc(showroomRef, {
+      ...donnees,
+      statut: "stock",
+      entreShowroomLe: serverTimestamp(),
+      entreShowroomPar: window.UTILISATEUR || "",
+    });
+    await deleteDoc(doc(db, "vehicules_archives", id));
+    n++;
+  }
+  return n;
 }
 
 // Suppression DÉFINITIVE d'une fiche de vente (efface l'historique de

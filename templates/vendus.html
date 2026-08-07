@@ -7,6 +7,10 @@
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
   <button class="btn btn-ghost" onclick="exporterCSV()">↓ Excel / CSV (filtré)</button>
   <button class="btn btn-ghost" onclick="exporterPDF()">↓ PDF</button>
+  <button class="btn btn-ghost" style="color:var(--orange);border-color:var(--orange);" onclick="corrigerFichesMalClassees()">🔧 Corriger les fiches sans vente réelle</button>
+</div>
+<div class="info-box" style="margin-bottom:16px;">
+  Le bouton ci-dessus renvoie automatiquement vers le Stock Showroom toute fiche présente ici qui n'a pas d'informations de vente complètes (client, prix, date) — utile pour les véhicules envoyés en showroom avant la mise à jour, qui s'étaient retrouvés ici par erreur alors qu'ils n'avaient jamais été vendus.
 </div>
 
 <div class="card">

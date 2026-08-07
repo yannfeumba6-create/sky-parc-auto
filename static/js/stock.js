@@ -1,5 +1,5 @@
 import {
-  ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement,
+  ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement, vendreVehicule,
   enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
   importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond, normaliserDateTexte,
   televerserFichier,
@@ -153,6 +153,7 @@ function ligneTableau(v) {
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
         <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie vers showroom</button>
+        <button class="btn btn-red btn-sm" data-action="vendre" data-id="${v.id}">Vendre</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
       </td>
     </tr>`;
@@ -397,6 +398,9 @@ document.addEventListener("click", async (e) => {
   if (action === "sortir") {
     ouvrirModalSortie(id);
   }
+  if (action === "vendre") {
+    ouvrirModalVenteParc(id);
+  }
   if (action === "supprimer") {
     const v = _vehicules.find((x) => x.id === id);
     if (!v) return;
@@ -505,6 +509,53 @@ window.confirmerSortie = async function () {
 
   closeModal("modal-sortie");
   _sortieCible = null;
+};
+
+// ---------------------------------------------------------------
+// Vente directe depuis le Stock véhicule parc (sans passer par un
+// showroom) — le véhicule bascule directement dans Véhicules vendus.
+// ---------------------------------------------------------------
+
+let _venteParcCible = null;
+
+function ouvrirModalVenteParc(id) {
+  const v = _vehicules.find((x) => x.id === id);
+  if (!v) return;
+  _venteParcCible = id;
+  document.getElementById("vp-titre").textContent = `VENTE — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("vp-clientNom").value = "";
+  document.getElementById("vp-clientContact").value = "";
+  document.getElementById("vp-dateVente").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("vp-prix").value = v.prix || "";
+  document.getElementById("vp-modePaiement").value = "";
+  document.getElementById("vp-vendeur").value = "";
+  openModal("modal-vente-parc");
+}
+
+window.confirmerVenteParc = async function () {
+  const clientNom = document.getElementById("vp-clientNom").value.trim();
+  const dateVente = document.getElementById("vp-dateVente").value;
+  const prix = document.getElementById("vp-prix").value;
+  if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
+  if (!dateVente) { toast("La date de vente est obligatoire", "terr"); return; }
+  if (!prix) { toast("Le prix de vente est obligatoire", "terr"); return; }
+  const v = _vehicules.find((x) => x.id === _venteParcCible);
+  if (!v) return;
+
+  await vendreVehicule(v, {
+    client: {
+      nom: clientNom,
+      contact: document.getElementById("vp-clientContact").value.trim(),
+      dateAchat: dateVente,
+      modePaiement: document.getElementById("vp-modePaiement").value.trim(),
+      vendeur: document.getElementById("vp-vendeur").value.trim(),
+    },
+    prix: Number(prix),
+    dateVente,
+  }, "vehicules");
+  toast("Véhicule vendu — visible dans Véhicules vendus");
+  closeModal("modal-vente-parc");
+  _venteParcCible = null;
 };
 
 // ---------------------------------------------------------------

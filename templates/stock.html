@@ -247,6 +247,27 @@
   </div>
 </div>
 
+<!-- MODAL — Vente directe depuis le Stock véhicule parc -->
+<div class="modal-bg" id="modal-vente-parc">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="vp-titre">VENTE DU VÉHICULE</div><button class="modal-close" onclick="closeModal('modal-vente-parc')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Nom du client / entreprise *</label><input type="text" id="vp-clientNom" required></div>
+        <div class="form-group"><label>Contact</label><input type="text" id="vp-clientContact"></div>
+        <div class="form-group"><label>Date de vente *</label><input type="date" id="vp-dateVente" required></div>
+        <div class="form-group"><label>Prix de vente (FCFA) *</label><input type="number" id="vp-prix" min="0" required></div>
+        <div class="form-group"><label>Mode de paiement</label><input type="text" id="vp-modePaiement"></div>
+        <div class="form-group"><label>Vendeur / agent</label><input type="text" id="vp-vendeur"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-vente-parc')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerVenteParc()">Confirmer la vente</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — Sortie de véhicule du parc -->
 <div class="modal-bg" id="modal-sortie">
   <div class="modal">
