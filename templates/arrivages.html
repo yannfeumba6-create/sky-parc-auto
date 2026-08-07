@@ -82,14 +82,24 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="mma-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse-arrivages')">✕</button></div>
     <div class="modal-body">
-      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier.</div>
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier. Le châssis n'est jamais modifiable en masse.</div>
       <div class="form-grid">
+        <div class="form-group"><label>Immatriculation</label><input type="text" id="mma-immatriculation" placeholder="Ne pas changer"></div>
         <div class="form-group"><label>Marque</label>
-          <select id="mma-marque"><option value="">Ne pas changer</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
+          <select id="mma-marque" onchange="onMarqueChangeMasse()"><option value="">Ne pas changer</option>{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select>
         </div>
+        <div class="form-group"><label>Modèle</label><select id="mma-modele"><option value="">Ne pas changer</option></select></div>
+        <div class="form-group"><label>Type</label>
+          <select id="mma-type"><option value="">Ne pas changer</option>{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group"><label>Année</label><input type="number" id="mma-annee" min="1990" max="2100" placeholder="Ne pas changer"></div>
+        <div class="form-group"><label>Couleur extérieure</label><input type="text" id="mma-couleurExt" placeholder="Ne pas changer"></div>
+        <div class="form-group"><label>Couleur intérieure</label><input type="text" id="mma-couleurInt" placeholder="Ne pas changer"></div>
         <div class="form-group"><label>Emplacement prévu</label>
           <select id="mma-emplacement"><option value="">Ne pas changer</option>{% for e in emplacements %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
         </div>
+        <div class="form-group"><label>Prix prévu (FCFA)</label><input type="number" id="mma-prix" min="0" placeholder="Ne pas changer"></div>
+        <div class="form-group"><label>Kilométrage</label><input type="number" id="mma-kilometrage" min="0" placeholder="Ne pas changer"></div>
         <div class="form-group"><label>Date d'arrivée prévue</label><input type="date" id="mma-date"></div>
       </div>
     </div>

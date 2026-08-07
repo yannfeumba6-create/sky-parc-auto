@@ -226,26 +226,54 @@ window.supprimerSelectionArrivages = async function () {
 // Modification en masse — n'applique que les champs renseignés
 // ---------------------------------------------------------------
 
+window.onMarqueChangeMasse = function () {
+  const marque = document.getElementById("mma-marque").value;
+  const sel = document.getElementById("mma-modele");
+  const modeles = marque ? (MODELES_PAR_MARQUE[marque] || []) : [];
+  sel.innerHTML = `<option value="">Ne pas changer</option>` + modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
+};
+
 window.ouvrirModifMasseArrivages = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
   document.getElementById("mma-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} arrivage(s)`;
+  ["mma-immatriculation", "mma-annee", "mma-couleurExt", "mma-couleurInt", "mma-emplacement", "mma-prix", "mma-kilometrage", "mma-date"].forEach((id) => {
+    document.getElementById(id).value = "";
+  });
   document.getElementById("mma-marque").value = "";
-  document.getElementById("mma-emplacement").value = "";
-  document.getElementById("mma-date").value = "";
+  document.getElementById("mma-modele").innerHTML = `<option value="">Ne pas changer</option>`;
+  document.getElementById("mma-type").value = "";
   openModal("modal-modif-masse-arrivages");
 };
 
 window.confirmerModifMasseArrivages = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
+
+  const champTexte = (id) => document.getElementById(id).value.trim();
+  const immatriculation = champTexte("mma-immatriculation");
   const marque = document.getElementById("mma-marque").value;
+  const modele = document.getElementById("mma-modele").value;
+  const type = document.getElementById("mma-type").value;
+  const annee = champTexte("mma-annee");
+  const couleurExt = champTexte("mma-couleurExt");
+  const couleurInt = champTexte("mma-couleurInt");
   const emplacement = document.getElementById("mma-emplacement").value;
+  const prix = champTexte("mma-prix");
+  const kilometrage = champTexte("mma-kilometrage");
   const date = document.getElementById("mma-date").value;
 
   const donnees = {};
+  if (immatriculation) donnees.immatriculation = immatriculation;
   if (marque) donnees.marque = marque;
+  if (modele) donnees.modele = modele;
+  if (type) donnees.type = type;
+  if (annee !== "") donnees.annee = Number(annee);
+  if (couleurExt) donnees.couleurExt = couleurExt;
+  if (couleurInt) donnees.couleurInt = couleurInt;
   if (emplacement) donnees.emplacement = emplacement;
+  if (prix !== "") donnees.prix = Number(prix);
+  if (kilometrage !== "") donnees.kilometrage = Number(kilometrage);
   if (date) donnees.dateArriveePrevue = date;
 
   if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }

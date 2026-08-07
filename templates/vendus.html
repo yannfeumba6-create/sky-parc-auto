@@ -49,9 +49,11 @@
 <div class="card" id="barre-selection" style="display:none;margin-bottom:16px;">
   <div style="padding:12px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
     <span><b id="nb-selection">0</b> véhicule(s) sélectionné(s)</span>
+    <button class="btn btn-ghost btn-sm" onclick="factureSelectionVendus()">🧾 Facture(s)</button>
+    <button class="btn btn-ghost btn-sm" onclick="annulerVenteSelection()">Annuler la/les vente(s)</button>
     <button class="btn btn-ghost btn-sm" onclick="ouvrirModifMasseVendus()">✎ Modifier la sélection</button>
     <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);" onclick="supprimerSelectionVendus()">🗑 Supprimer définitivement la sélection</button>
-    <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Annuler la sélection</button>
+    <button class="btn btn-ghost btn-sm" onclick="viderSelection()">Vider la sélection</button>
   </div>
 </div>
 
@@ -60,10 +62,22 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="mmv-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse-vendus')">✕</button></div>
     <div class="modal-body">
-      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide pour ne pas le modifier.</div>
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier.</div>
       <div class="form-grid">
+        <div class="form-group"><label>Nom du client</label><input type="text" id="mmv-clientNom" placeholder="Laisser vide = ne pas changer"></div>
+        <div class="form-group"><label>Contact client</label><input type="text" id="mmv-clientContact" placeholder="Laisser vide = ne pas changer"></div>
         <div class="form-group"><label>Vendeur / agent</label><input type="text" id="mmv-vendeur" placeholder="Laisser vide = ne pas changer"></div>
         <div class="form-group"><label>Mode de paiement</label><input type="text" id="mmv-modePaiement" placeholder="Laisser vide = ne pas changer"></div>
+        <div class="form-group"><label>Prix de vente (FCFA)</label><input type="number" id="mmv-prix" min="0" placeholder="Laisser vide = ne pas changer"></div>
+        <div class="form-group"><label>Date de vente</label><input type="date" id="mmv-dateVente"></div>
+        <div class="form-group"><label>Showroom d'origine</label>
+          <select id="mmv-destination">
+            <option value="">Ne pas changer</option>
+            <option value="Showroom Douala">Showroom Douala</option>
+            <option value="Showroom Yaoundé">Showroom Yaoundé</option>
+            <option value="Showroom Bafoussam">Showroom Bafoussam</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="modal-footer">

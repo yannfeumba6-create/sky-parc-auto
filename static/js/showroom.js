@@ -134,23 +134,45 @@ window.supprimerSelectionShowroom = async function () {
 // Modification en masse
 // ---------------------------------------------------------------
 
+window.onMarqueChangeMasseShowroom = function () {
+  const marque = document.getElementById("mms-marque").value;
+  const sel = document.getElementById("mms-modele");
+  const modeles = marque ? (MODELES_PAR_MARQUE[marque] || []) : [];
+  sel.innerHTML = `<option value="">Ne pas changer</option>` + modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
+};
+
 window.ouvrirModifMasseShowroom = function () {
+  document.getElementById("mms-marque").value = "";
+  document.getElementById("mms-modele").innerHTML = `<option value="">Ne pas changer</option>`;
   document.getElementById("mms-statut").value = "";
   document.getElementById("mms-destination").value = "";
   document.getElementById("mms-prix").value = "";
+  document.getElementById("mms-dateEntree").value = "";
+  document.getElementById("mms-dateSortie").value = "";
+  document.getElementById("mms-chauffeur").value = "";
   openModal("modal-modif-masse-showroom");
 };
 
 window.confirmerModifMasseShowroom = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
+  const marque = document.getElementById("mms-marque").value;
+  const modele = document.getElementById("mms-modele").value;
   const statut = document.getElementById("mms-statut").value;
   const destination = document.getElementById("mms-destination").value;
   const prix = document.getElementById("mms-prix").value;
+  const dateEntree = document.getElementById("mms-dateEntree").value;
+  const dateSortie = document.getElementById("mms-dateSortie").value;
+  const chauffeur = document.getElementById("mms-chauffeur").value.trim();
   const donnees = {};
+  if (marque) donnees.marque = marque;
+  if (modele) donnees.modele = modele;
   if (statut) donnees.statut = statut;
   if (destination) donnees.destination = destination;
   if (prix !== "") donnees.prix = Number(prix);
+  if (dateEntree) donnees.dateEntree = dateEntree;
+  if (dateSortie) donnees.dateSortie = dateSortie;
+  if (chauffeur) donnees.chauffeurSortie = chauffeur;
   if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
   if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
   for (const id of ids) await majVehiculeShowroom(id, { ...donnees });

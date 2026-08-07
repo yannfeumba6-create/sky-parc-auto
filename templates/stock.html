@@ -219,8 +219,31 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="modif-masse-titre">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse')">✕</button></div>
     <div class="modal-body">
-      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier. Seuls les champs renseignés seront appliqués à tous les véhicules sélectionnés.</div>
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier. Seuls les champs renseignés seront appliqués à tous les véhicules sélectionnés. Le châssis n'est jamais modifiable en masse (identifiant unique par véhicule).</div>
       <form id="form-modif-masse">
+        <div class="section-lbl">Identification</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Immatriculation</label><input type="text" id="mm-immatriculation" placeholder="Laisser vide = ne pas changer"></div>
+          <div class="form-group"><label>Marque</label>
+            <select id="mm-marque" onchange="onMarqueChangeMasse()">
+              <option value="">Ne pas changer</option>
+              {% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group"><label>Modèle</label><select id="mm-modele"><option value="">Ne pas changer</option></select></div>
+          <div class="form-group"><label>Type</label>
+            <select id="mm-type">
+              <option value="">Ne pas changer</option>
+              {% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group"><label>Année</label><input type="number" id="mm-annee" min="1990" max="2100" placeholder="Ne pas changer"></div>
+          <div class="form-group"><label>Couleur extérieure</label><input type="text" id="mm-couleurExt" list="liste-couleurs" placeholder="Ne pas changer"></div>
+          <div class="form-group"><label>Couleur intérieure</label><input type="text" id="mm-couleurInt" list="liste-couleurs" placeholder="Ne pas changer"></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-lbl">Commercial</div>
         <div class="form-grid">
           <div class="form-group"><label>Statut</label>
             <select id="mm-statut">
@@ -237,6 +260,19 @@
             </select>
           </div>
           <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="mm-prix" min="0" placeholder="Laisser vide = ne pas changer"></div>
+          <div class="form-group"><label>Kilométrage</label><input type="number" id="mm-kilometrage" min="0" placeholder="Laisser vide = ne pas changer"></div>
+          <div class="form-group"><label>Date d'entrée</label><input type="date" id="mm-dateEntree"></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-lbl">Équipements — cocher pour ajouter/mettre à jour sur toute la sélection</div>
+        <div class="equip-grid" id="mm-equip-grid">
+          {% for e in equipements %}
+          <label class="equip-item" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" data-mm-equip="{{ e }}"> {{ e }}
+            <input type="number" min="0" value="1" data-mm-equip-qty="{{ e }}" style="width:50px;margin-left:auto;">
+          </label>
+          {% endfor %}
         </div>
       </form>
     </div>

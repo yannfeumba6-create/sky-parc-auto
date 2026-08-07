@@ -132,6 +132,25 @@ window.viderSelection = function () {
   rendre();
 };
 
+window.factureSelectionVendus = function () {
+  const liste = _vendus.filter((v) => _selection.has(v.id));
+  if (liste.length === 0) return;
+  const corps = liste
+    .map((v, i) => `${i > 0 ? '<div style="page-break-before:always;"></div>' : ""}${factureCorps(v)}`)
+    .join("");
+  document.getElementById("pdf-content").innerHTML = corps;
+  printPDF("pdf-content", liste.length > 1 ? `Factures — ${liste.length} véhicule(s)` : `Facture — ${chassis6(liste[0].chassis)}`);
+};
+
+window.annulerVenteSelection = async function () {
+  const liste = _vendus.filter((v) => _selection.has(v.id));
+  if (liste.length === 0) return;
+  if (!confirm(`Annuler la vente de ${liste.length} véhicule(s) sélectionné(s) ? Ils repartiront dans le Stock Showroom.`)) return;
+  for (const v of liste) await annulerVente(v);
+  toast(`${liste.length} vente(s) annulée(s) — véhicule(s) remis en Stock Showroom`);
+  _selection.clear();
+};
+
 window.supprimerSelectionVendus = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
@@ -149,27 +168,43 @@ window.ouvrirModifMasseVendus = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
   document.getElementById("mmv-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} véhicule(s) vendu(s)`;
-  document.getElementById("mmv-vendeur").value = "";
-  document.getElementById("mmv-modePaiement").value = "";
+  ["mmv-clientNom", "mmv-clientContact", "mmv-vendeur", "mmv-modePaiement", "mmv-prix", "mmv-dateVente"].forEach((id) => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("mmv-destination").value = "";
   openModal("modal-modif-masse-vendus");
 };
 
 window.confirmerModifMasseVendus = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
+  const clientNom = document.getElementById("mmv-clientNom").value.trim();
+  const clientContact = document.getElementById("mmv-clientContact").value.trim();
   const vendeur = document.getElementById("mmv-vendeur").value.trim();
   const modePaiement = document.getElementById("mmv-modePaiement").value.trim();
+  const prix = document.getElementById("mmv-prix").value;
+  const dateVente = document.getElementById("mmv-dateVente").value;
+  const destination = document.getElementById("mmv-destination").value;
 
-  if (!vendeur && !modePaiement) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
+  if (!clientNom && !clientContact && !vendeur && !modePaiement && prix === "" && !dateVente && !destination) {
+    toast("Renseigne au moins un champ à modifier", "terr");
+    return;
+  }
   if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
 
   for (const id of ids) {
     const v = _vendus.find((x) => x.id === id);
     if (!v) continue;
     const client = { ...(v.client || {}) };
+    if (clientNom) client.nom = clientNom;
+    if (clientContact) client.contact = clientContact;
     if (vendeur) client.vendeur = vendeur;
     if (modePaiement) client.modePaiement = modePaiement;
-    await majArchive(id, { client });
+    const donnees = { client };
+    if (prix !== "") donnees.prix = Number(prix);
+    if (dateVente) donnees.dateVente = dateVente;
+    if (destination) donnees.destination = destination;
+    await majArchive(id, donnees);
   }
   toast(`${ids.length} fiche(s) modifiée(s)`);
   closeModal("modal-modif-masse-vendus");
@@ -185,12 +220,8 @@ document.addEventListener("click", (e) => {
   }
 });
 
-document.addEventListener("click", async (e) => {
-  const factureBtn = e.target.closest("[data-facture]");
-  if (factureBtn) {
-    const v = _vendus.find((x) => x.id === factureBtn.dataset.facture);
-    if (!v) return;
-    const corps = `
+function factureCorps(v) {
+  return `
       <table>
         <tbody>
           <tr><td style="font-weight:700;width:35%;">Châssis</td><td>${esc(v.chassis) || "—"}</td></tr>
@@ -204,7 +235,14 @@ document.addEventListener("click", async (e) => {
           <tr><td style="font-weight:700;">Vendeur / agent</td><td>${esc(v.client?.vendeur) || "—"}</td></tr>
         </tbody>
       </table>`;
-    document.getElementById("pdf-content").innerHTML = corps;
+}
+
+document.addEventListener("click", async (e) => {
+  const factureBtn = e.target.closest("[data-facture]");
+  if (factureBtn) {
+    const v = _vendus.find((x) => x.id === factureBtn.dataset.facture);
+    if (!v) return;
+    document.getElementById("pdf-content").innerHTML = factureCorps(v);
     printPDF("pdf-content", `Facture — ${chassis6(v.chassis)}`);
     return;
   }

@@ -242,33 +242,82 @@ window.supprimerSelectionVehicules = async function () {
 // Modification en masse — n'applique que les champs renseignés
 // ---------------------------------------------------------------
 
+window.onMarqueChangeMasse = function () {
+  const marque = document.getElementById("mm-marque").value;
+  const sel = document.getElementById("mm-modele");
+  const modeles = marque ? (MODELES_PAR_MARQUE[marque] || []) : [];
+  sel.innerHTML = `<option value="">Ne pas changer</option>` + modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
+};
+
 window.ouvrirModifMasse = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
   document.getElementById("modif-masse-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} véhicule(s)`;
-  document.getElementById("mm-statut").value = "";
-  document.getElementById("mm-emplacement").value = "";
-  document.getElementById("mm-prix").value = "";
+  ["mm-immatriculation", "mm-annee", "mm-couleurExt", "mm-couleurInt", "mm-statut", "mm-emplacement", "mm-prix", "mm-kilometrage", "mm-dateEntree"].forEach((id) => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("mm-marque").value = "";
+  document.getElementById("mm-modele").innerHTML = `<option value="">Ne pas changer</option>`;
+  document.querySelectorAll("#mm-equip-grid [data-mm-equip]").forEach((c) => { c.checked = false; });
+  document.querySelectorAll("#mm-equip-grid [data-mm-equip-qty]").forEach((q) => { q.value = 1; });
   openModal("modal-modif-masse");
 };
 
 window.confirmerModifMasse = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
+
+  const champTexte = (id) => document.getElementById(id).value.trim();
+  const immatriculation = champTexte("mm-immatriculation");
+  const marque = document.getElementById("mm-marque").value;
+  const modele = document.getElementById("mm-modele").value;
+  const type = document.getElementById("mm-type").value;
+  const annee = champTexte("mm-annee");
+  const couleurExt = champTexte("mm-couleurExt");
+  const couleurInt = champTexte("mm-couleurInt");
   const statut = document.getElementById("mm-statut").value;
   const emplacement = document.getElementById("mm-emplacement").value;
-  const prix = document.getElementById("mm-prix").value;
+  const prix = champTexte("mm-prix");
+  const kilometrage = champTexte("mm-kilometrage");
+  const dateEntree = champTexte("mm-dateEntree");
 
   const donnees = {};
+  if (immatriculation) donnees.immatriculation = immatriculation;
+  if (marque) donnees.marque = marque;
+  if (modele) donnees.modele = modele;
+  if (type) donnees.type = type;
+  if (annee !== "") donnees.annee = Number(annee);
+  if (couleurExt) { donnees.couleurExt = couleurExt; memoriserCouleur(couleurExt); }
+  if (couleurInt) { donnees.couleurInt = couleurInt; memoriserCouleur(couleurInt); }
   if (statut) donnees.statut = statut;
   if (emplacement) donnees.emplacement = emplacement;
   if (prix !== "") donnees.prix = Number(prix);
+  if (kilometrage !== "") donnees.kilometrage = Number(kilometrage);
+  if (dateEntree) donnees.dateEntree = dateEntree;
 
-  if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
+  const equipementsCoches = [...document.querySelectorAll("#mm-equip-grid [data-mm-equip]")].filter((c) => c.checked);
+  const equipementsAAppliquer = equipementsCoches.map((c) => ({
+    nom: c.dataset.mmEquip,
+    qte: Number(document.querySelector(`[data-mm-equip-qty="${c.dataset.mmEquip}"]`).value) || 0,
+  }));
+
+  if (Object.keys(donnees).length === 0 && equipementsAAppliquer.length === 0) {
+    toast("Renseigne au moins un champ à modifier", "terr");
+    return;
+  }
   if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
 
   for (const id of ids) {
-    await majVehicule(id, { ...donnees });
+    const cible = { ...donnees };
+    if (equipementsAAppliquer.length > 0) {
+      const v = _vehicules.find((x) => x.id === id);
+      const equipementsActuels = { ...((v && v.equipements) || {}) };
+      equipementsAAppliquer.forEach((eq) => {
+        equipementsActuels[eq.nom] = { present: true, quantite: eq.qte };
+      });
+      cible.equipements = equipementsActuels;
+    }
+    await majVehicule(id, cible);
   }
   toast(`${ids.length} véhicule(s) modifié(s)`);
   closeModal("modal-modif-masse");

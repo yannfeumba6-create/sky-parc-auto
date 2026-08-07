@@ -17,9 +17,9 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
+  addDoc as _addDocSDK,
+  updateDoc as _updateDocSDK,
+  deleteDoc as _deleteDocSDK,
   writeBatch,
   query,
   where,
@@ -79,10 +79,11 @@ export const showroomRef = collection(db, "vehicules_showroom");
 // ---------------------------------------------------------------
 
 let _resoudreAuthPrete;
-export const authPrete = new Promise((resolve) => { _resoudreAuthPrete = resolve; });
+export let authPrete = new Promise((resolve) => { _resoudreAuthPrete = resolve; });
 export let erreurAuthFirebase = null;
 
 async function connecterFirebase() {
+  erreurAuthFirebase = null;
   try {
     const res = await fetch("/api/firebase-token");
     const data = await res.json().catch(() => ({}));
@@ -107,6 +108,38 @@ async function connecterFirebase() {
 }
 connecterFirebase();
 
+// Force une nouvelle authentification Firebase. Utilisé comme filet de
+// rattrapage quand une écriture échoue avec "permission-denied" : ça peut
+// arriver si le jeton de connexion initial a expiré ou n'a pas abouti
+// correctement (session longue, coupure réseau au chargement de la page...).
+// On rejoue alors la connexion puis on retente une seule fois l'opération,
+// au lieu de laisser l'utilisateur bloqué jusqu'à un rechargement manuel.
+export function reconnecterFirebase() {
+  authPrete = new Promise((resolve) => { _resoudreAuthPrete = resolve; });
+  return connecterFirebase();
+}
+
+async function avecReconnexionSiRefuse(operation) {
+  try {
+    return await operation();
+  } catch (e) {
+    if (e?.code === "permission-denied") {
+      console.warn("Écriture Firestore refusée — nouvelle tentative de connexion, puis un seul nouvel essai…");
+      await reconnecterFirebase();
+      return await operation();
+    }
+    throw e;
+  }
+}
+
+// Mêmes signatures que les fonctions Firestore d'origine, mais avec une
+// reconnexion + un seul essai supplémentaire en cas de refus de permission,
+// pour éviter le message "Accès à la base de données refusé" sur une simple
+// expiration de session au lieu d'un vrai problème de droits.
+export function addDoc(...args) { return avecReconnexionSiRefuse(() => _addDocSDK(...args)); }
+export function updateDoc(...args) { return avecReconnexionSiRefuse(() => _updateDocSDK(...args)); }
+export function deleteDoc(...args) { return avecReconnexionSiRefuse(() => _deleteDocSDK(...args)); }
+
 export {
-  doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
+  doc, getDocs, getDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
 };
