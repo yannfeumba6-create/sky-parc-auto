@@ -473,7 +473,10 @@ export async function corrigerFichesMalClasseesVendus() {
   let n = 0;
   for (const d of snap.docs) {
     const v = { id: d.id, ...d.data() };
-    const venteReelle = v.client && v.client.nom && v.prix && (v.dateVente || v.client.dateAchat);
+    // Le prix est facultatif à la vente, donc sa présence ne peut plus
+    // servir de critère : seul un nom de client + une date de vente
+    // signent une vraie vente.
+    const venteReelle = v.client && v.client.nom && (v.dateVente || v.client.dateAchat);
     if (venteReelle) continue;
     const { id, sortiLe, sortiPar, client, prix, dateVente, statut, origineVente, ...donnees } = v;
     await addDoc(showroomRef, {

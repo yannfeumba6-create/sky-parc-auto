@@ -242,82 +242,33 @@ window.supprimerSelectionVehicules = async function () {
 // Modification en masse — n'applique que les champs renseignés
 // ---------------------------------------------------------------
 
-window.onMarqueChangeMasse = function () {
-  const marque = document.getElementById("mm-marque").value;
-  const sel = document.getElementById("mm-modele");
-  const modeles = marque ? (MODELES_PAR_MARQUE[marque] || []) : [];
-  sel.innerHTML = `<option value="">Ne pas changer</option>` + modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
-};
-
 window.ouvrirModifMasse = function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
   document.getElementById("modif-masse-titre").textContent = `MODIFIER LA SÉLECTION — ${ids.length} véhicule(s)`;
-  ["mm-immatriculation", "mm-annee", "mm-couleurExt", "mm-couleurInt", "mm-statut", "mm-emplacement", "mm-prix", "mm-kilometrage", "mm-dateEntree"].forEach((id) => {
-    document.getElementById(id).value = "";
-  });
-  document.getElementById("mm-marque").value = "";
-  document.getElementById("mm-modele").innerHTML = `<option value="">Ne pas changer</option>`;
-  document.querySelectorAll("#mm-equip-grid [data-mm-equip]").forEach((c) => { c.checked = false; });
-  document.querySelectorAll("#mm-equip-grid [data-mm-equip-qty]").forEach((q) => { q.value = 1; });
+  document.getElementById("mm-statut").value = "";
+  document.getElementById("mm-emplacement").value = "";
+  document.getElementById("mm-prix").value = "";
   openModal("modal-modif-masse");
 };
 
 window.confirmerModifMasse = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-
-  const champTexte = (id) => document.getElementById(id).value.trim();
-  const immatriculation = champTexte("mm-immatriculation");
-  const marque = document.getElementById("mm-marque").value;
-  const modele = document.getElementById("mm-modele").value;
-  const type = document.getElementById("mm-type").value;
-  const annee = champTexte("mm-annee");
-  const couleurExt = champTexte("mm-couleurExt");
-  const couleurInt = champTexte("mm-couleurInt");
   const statut = document.getElementById("mm-statut").value;
   const emplacement = document.getElementById("mm-emplacement").value;
-  const prix = champTexte("mm-prix");
-  const kilometrage = champTexte("mm-kilometrage");
-  const dateEntree = champTexte("mm-dateEntree");
+  const prix = document.getElementById("mm-prix").value;
 
   const donnees = {};
-  if (immatriculation) donnees.immatriculation = immatriculation;
-  if (marque) donnees.marque = marque;
-  if (modele) donnees.modele = modele;
-  if (type) donnees.type = type;
-  if (annee !== "") donnees.annee = Number(annee);
-  if (couleurExt) { donnees.couleurExt = couleurExt; memoriserCouleur(couleurExt); }
-  if (couleurInt) { donnees.couleurInt = couleurInt; memoriserCouleur(couleurInt); }
   if (statut) donnees.statut = statut;
   if (emplacement) donnees.emplacement = emplacement;
   if (prix !== "") donnees.prix = Number(prix);
-  if (kilometrage !== "") donnees.kilometrage = Number(kilometrage);
-  if (dateEntree) donnees.dateEntree = dateEntree;
 
-  const equipementsCoches = [...document.querySelectorAll("#mm-equip-grid [data-mm-equip]")].filter((c) => c.checked);
-  const equipementsAAppliquer = equipementsCoches.map((c) => ({
-    nom: c.dataset.mmEquip,
-    qte: Number(document.querySelector(`[data-mm-equip-qty="${c.dataset.mmEquip}"]`).value) || 0,
-  }));
-
-  if (Object.keys(donnees).length === 0 && equipementsAAppliquer.length === 0) {
-    toast("Renseigne au moins un champ à modifier", "terr");
-    return;
-  }
+  if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
   if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
 
   for (const id of ids) {
-    const cible = { ...donnees };
-    if (equipementsAAppliquer.length > 0) {
-      const v = _vehicules.find((x) => x.id === id);
-      const equipementsActuels = { ...((v && v.equipements) || {}) };
-      equipementsAAppliquer.forEach((eq) => {
-        equipementsActuels[eq.nom] = { present: true, quantite: eq.qte };
-      });
-      cible.equipements = equipementsActuels;
-    }
-    await majVehicule(id, cible);
+    await majVehicule(id, { ...donnees });
   }
   toast(`${ids.length} véhicule(s) modifié(s)`);
   closeModal("modal-modif-masse");
@@ -587,7 +538,6 @@ window.confirmerVenteParc = async function () {
   const prix = document.getElementById("vp-prix").value;
   if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
   if (!dateVente) { toast("La date de vente est obligatoire", "terr"); return; }
-  if (!prix) { toast("Le prix de vente est obligatoire", "terr"); return; }
   const v = _vehicules.find((x) => x.id === _venteParcCible);
   if (!v) return;
 
@@ -599,7 +549,7 @@ window.confirmerVenteParc = async function () {
       modePaiement: document.getElementById("vp-modePaiement").value.trim(),
       vendeur: document.getElementById("vp-vendeur").value.trim(),
     },
-    prix: Number(prix),
+    prix: prix ? Number(prix) : null,
     dateVente,
   }, "vehicules");
   toast("Véhicule vendu — visible dans Véhicules vendus");
@@ -634,11 +584,29 @@ function ouvrirModalDommage(id) {
   document.getElementById("dommage-modal-titre").textContent = `SIGNALER UN DOMMAGE — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
   document.getElementById("d-constat").value = "";
   document.getElementById("d-dateConstat").value = new Date().toISOString().slice(0, 10);
-  document.getElementById("d-photo").value = "";
-  document.getElementById("d-video").value = "";
+  ["d-photo-camera", "d-photo-fichier", "d-video-camera", "d-video-fichier"].forEach((id) => { document.getElementById(id).value = ""; });
+  document.getElementById("d-photo-nom").textContent = "";
+  document.getElementById("d-video-nom").textContent = "";
   document.getElementById("d-upload-statut").textContent = "";
   openModal("modal-dommage");
 }
+
+// Deux façons d'ajouter chaque média (caméra du téléphone OU import depuis
+// la galerie/le PC) : quand l'une est utilisée, l'autre est vidée pour ne
+// garder qu'un seul fichier par média, sans ambiguïté.
+function brancherChoixMedia(idCamera, idFichier, idNom) {
+  const elCamera = document.getElementById(idCamera);
+  const elFichier = document.getElementById(idFichier);
+  const elNom = document.getElementById(idNom);
+  elCamera.addEventListener("change", () => {
+    if (elCamera.files[0]) { elFichier.value = ""; elNom.textContent = "✓ " + elCamera.files[0].name; }
+  });
+  elFichier.addEventListener("change", () => {
+    if (elFichier.files[0]) { elCamera.value = ""; elNom.textContent = "✓ " + elFichier.files[0].name; }
+  });
+}
+brancherChoixMedia("d-photo-camera", "d-photo-fichier", "d-photo-nom");
+brancherChoixMedia("d-video-camera", "d-video-fichier", "d-video-nom");
 
 window.confirmerDommage = async function () {
   const v = _vehicules.find((x) => x.id === _dommageCible);
@@ -648,8 +616,8 @@ window.confirmerDommage = async function () {
   if (!constat) { toast("Le constat est obligatoire", "terr"); return; }
   if (!dateConstat) { toast("La date du constat est obligatoire", "terr"); return; }
 
-  const photo = document.getElementById("d-photo").files[0];
-  const video = document.getElementById("d-video").files[0];
+  const photo = document.getElementById("d-photo-camera").files[0] || document.getElementById("d-photo-fichier").files[0];
+  const video = document.getElementById("d-video-camera").files[0] || document.getElementById("d-video-fichier").files[0];
   const statutEl = document.getElementById("d-upload-statut");
   const btn = document.getElementById("d-btn-confirmer");
 

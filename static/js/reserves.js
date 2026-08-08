@@ -139,7 +139,6 @@ window.confirmerVenteReserve = async function () {
   const prix = document.getElementById("vr-prix").value;
   if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
   if (!dateVente) { toast("La date de vente est obligatoire", "terr"); return; }
-  if (!prix) { toast("Le prix de vente est obligatoire", "terr"); return; }
   const v = _liste.find((x) => x.id === _venteCible);
   if (!v) return;
 
@@ -151,7 +150,7 @@ window.confirmerVenteReserve = async function () {
       modePaiement: document.getElementById("vr-modePaiement").value.trim(),
       vendeur: document.getElementById("vr-vendeur").value.trim(),
     },
-    prix: Number(prix),
+    prix: prix ? Number(prix) : null,
     dateVente,
   });
   toast("Véhicule vendu — visible dans Véhicules vendus");

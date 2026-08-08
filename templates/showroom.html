@@ -70,7 +70,7 @@
           <div class="form-group"><label>Nom du client / entreprise *</label><input type="text" id="ve-clientNom" required></div>
           <div class="form-group"><label>Contact</label><input type="text" id="ve-clientContact"></div>
           <div class="form-group"><label>Date de vente *</label><input type="date" id="ve-dateVente" required></div>
-          <div class="form-group"><label>Prix de vente (FCFA) *</label><input type="number" id="ve-prix" min="0" required></div>
+          <div class="form-group"><label>Prix de vente (FCFA)</label><input type="number" id="ve-prix" min="0" placeholder="Optionnel"></div>
           <div class="form-group"><label>Mode de paiement</label><input type="text" id="ve-modePaiement"></div>
           <div class="form-group"><label>Vendeur / agent</label><input type="text" id="ve-vendeur"></div>
         </div>
@@ -90,15 +90,8 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title">MODIFIER LA SÉLECTION</div><button class="modal-close" onclick="closeModal('modal-modif-masse-showroom')">✕</button></div>
     <div class="modal-body">
-      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier. Le châssis n'est jamais modifiable en masse.</div>
+      <div class="info-box" style="margin-bottom:14px;">Laisse un champ vide (ou sur « Ne pas changer ») pour ne pas le modifier.</div>
       <div class="form-grid">
-        <div class="form-group"><label>Marque</label>
-          <select id="mms-marque" onchange="onMarqueChangeMasseShowroom()">
-            <option value="">Ne pas changer</option>
-            {% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="form-group"><label>Modèle</label><select id="mms-modele"><option value="">Ne pas changer</option></select></div>
         <div class="form-group"><label>Statut</label>
           <select id="mms-statut">
             <option value="">Ne pas changer</option>
@@ -116,9 +109,6 @@
           </select>
         </div>
         <div class="form-group"><label>Prix (FCFA)</label><input type="number" id="mms-prix" min="0" placeholder="Laisser vide = ne pas changer"></div>
-        <div class="form-group"><label>Date d'entrée (parc)</label><input type="date" id="mms-dateEntree"></div>
-        <div class="form-group"><label>Date de sortie (vers showroom)</label><input type="date" id="mms-dateSortie"></div>
-        <div class="form-group"><label>Chauffeur</label><input type="text" id="mms-chauffeur" placeholder="Laisser vide = ne pas changer"></div>
       </div>
     </div>
     <div class="modal-footer">

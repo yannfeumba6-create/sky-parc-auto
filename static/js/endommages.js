@@ -132,35 +132,15 @@ window.supprimerSelectionEndommages = async function () {
 
 window.ouvrirModifMasseEndommages = function () {
   document.getElementById("mme-statut").value = "";
-  document.getElementById("mme-emplacement").value = "";
-  document.getElementById("mme-constat").value = "";
-  document.getElementById("mme-dateConstat").value = "";
-  document.getElementById("mme-compagnie").value = "";
-  document.getElementById("mme-chauffeur").value = "";
   openModal("modal-modif-masse-endommages");
 };
 
 window.confirmerModifMasseEndommages = async function () {
   const ids = [..._selection];
-  if (ids.length === 0) return;
   const statut = document.getElementById("mme-statut").value;
-  const emplacement = document.getElementById("mme-emplacement").value;
-  const constat = document.getElementById("mme-constat").value.trim();
-  const dateConstat = document.getElementById("mme-dateConstat").value;
-  const compagnie = document.getElementById("mme-compagnie").value.trim();
-  const chauffeur = document.getElementById("mme-chauffeur").value.trim();
-
-  const donnees = {};
-  if (statut) donnees.statut = statut;
-  if (emplacement) donnees.emplacement = emplacement;
-  if (constat) donnees.piecesEndommagees = constat;
-  if (dateConstat) donnees.dateConstat = dateConstat;
-  if (compagnie) donnees.compagnieReparation = compagnie;
-  if (chauffeur) donnees.chauffeurTransfert = chauffeur;
-
-  if (Object.keys(donnees).length === 0) { toast("Renseigne au moins un champ à modifier", "terr"); return; }
-  if (!confirm(`Appliquer ces modifications à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
-  for (const id of ids) await majVehicule(id, { ...donnees });
+  if (!statut) { toast("Choisis un état à appliquer", "terr"); return; }
+  if (!confirm(`Appliquer ce changement d'état à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
+  for (const id of ids) await majVehicule(id, { statut });
   toast(`${ids.length} véhicule(s) modifié(s)`);
   closeModal("modal-modif-masse-endommages");
   _selection.clear();
