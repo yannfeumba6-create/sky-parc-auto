@@ -1,6 +1,6 @@
 import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
-  entrerArrivageEnStock, arrivageChassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
+  entrerArrivageEnStock, arrivageChassisExisteDeja, chassis6, typeAutomatique, estTypeCamion, couleursValides, MODELES_PAR_MARQUE,
   importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
   marqueCorrespond, modeleCorrespond, normaliserDateTexte, ecouterVehicules, ecouterShowroom,
 } from "./data.js";
@@ -17,6 +17,17 @@ window.onMarqueChange = function () {
   sel.innerHTML = modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
   const typeAuto = typeAutomatique(marque);
   if (typeAuto) document.getElementById("v-type").value = typeAuto;
+  onTypeChange();
+};
+
+// Camion / camionnette n'ont qu'une seule "couleur de cabine" ; les autres
+// types gardent couleur extérieure + intérieure séparées (voir stock.js).
+window.onTypeChange = function () {
+  const type = document.getElementById("v-type").value;
+  const camion = estTypeCamion(type);
+  document.getElementById("v-couleurExt-wrap").style.display = camion ? "none" : "";
+  document.getElementById("v-couleurInt-wrap").style.display = camion ? "none" : "";
+  document.getElementById("v-couleurCabine-wrap").style.display = camion ? "" : "none";
 };
 
 // ---------------------------------------------------------------
@@ -142,7 +153,7 @@ function ligneTableau(v) {
       <td>${esc(v.modele) || "—"}</td>
       <td>${esc(v.type) || "—"}</td>
       <td>${esc(v.emplacement) || "—"}</td>
-      <td style="font-size:12px;">Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}</td>
+      <td style="font-size:12px;">${v.type && estTypeCamion(v.type) ? `Cabine : ${esc(v.couleurCabine) || "—"}` : `Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}`}</td>
       <td>${esc(v.annee) || "—"}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
       <td>${esc(v.dateArriveePrevue) || "—"}</td>
@@ -373,9 +384,11 @@ async function ouvrirEdition(id) {
   set("v-chassis", v.chassis); set("v-immatriculation", v.immatriculation);
   set("v-marque", v.marque); onMarqueChange(); set("v-modele", v.modele); set("v-type", v.type);
   set("v-annee", v.annee); set("v-couleurExt", v.couleurExt); set("v-couleurInt", v.couleurInt);
+  set("v-couleurCabine", v.couleurCabine);
   set("v-emplacement", v.emplacement);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
   set("v-dateArriveePrevue", v.dateArriveePrevue);
+  onTypeChange();
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
       const cb = document.querySelector(`[data-equip="${nom}"]`);
@@ -399,16 +412,19 @@ function lireEquipements() {
 
 window.enregistrerArrivage = async function () {
   const id = document.getElementById("v-id").value;
+  const type = document.getElementById("v-type").value;
+  const camion = estTypeCamion(type);
 
   const donnees = {
     chassis: document.getElementById("v-chassis").value.trim(),
     immatriculation: document.getElementById("v-immatriculation").value.trim(),
     marque: document.getElementById("v-marque").value,
     modele: document.getElementById("v-modele").value.trim(),
-    type: document.getElementById("v-type").value,
+    type,
     annee: Number(document.getElementById("v-annee").value) || null,
-    couleurExt: document.getElementById("v-couleurExt").value,
-    couleurInt: document.getElementById("v-couleurInt").value,
+    couleurExt: camion ? "" : document.getElementById("v-couleurExt").value,
+    couleurInt: camion ? "" : document.getElementById("v-couleurInt").value,
+    couleurCabine: camion ? document.getElementById("v-couleurCabine").value : "",
     emplacement: document.getElementById("v-emplacement").value,
     prix: Number(document.getElementById("v-prix").value) || null,
     kilometrage: Number(document.getElementById("v-kilometrage").value) || null,
@@ -416,8 +432,12 @@ window.enregistrerArrivage = async function () {
     equipements: lireEquipements(),
   };
 
-  if (!donnees.chassis || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateArriveePrevue) {
-    toast("Châssis, modèle, couleurs et date d'arrivée prévue sont requis", "terr");
+  if (!donnees.chassis || !donnees.marque || !donnees.modele || !donnees.dateArriveePrevue) {
+    toast("Châssis, marque, modèle et date d'arrivée prévue sont requis", "terr");
+    return;
+  }
+  if (!couleursValides(donnees)) {
+    toast(camion ? "La couleur de cabine est requise" : "Les couleurs extérieure et intérieure sont requises", "terr");
     return;
   }
   if (await arrivageChassisExisteDeja(donnees.chassis, id)) {
@@ -427,6 +447,7 @@ window.enregistrerArrivage = async function () {
 
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
+  memoriserCouleur(donnees.couleurCabine);
 
   if (id) await majArrivage(id, donnees);
   else await creerArrivage(donnees);
@@ -583,6 +604,8 @@ const CHAMPS_IMPORT = [
   { cle: "type", label: "Type" },
   { cle: "couleurExt", label: "Couleur ext." },
   { cle: "couleurInt", label: "Couleur int." },
+  { cle: "couleurCabine", label: "Couleur cabine" },
+  { cle: "couleurUnique", label: "Couleur (ext./cabine selon le type)" },
   { cle: "emplacement", label: "Emplacement" },
   { cle: CHAMP_DATE, label: "Arrivée prévue" },
   { cle: "annee", label: "Année" },
@@ -595,6 +618,7 @@ const ALIAS_COLONNES = {
   modele: ["modele", "modèle"],
   couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color"],
   couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
+  couleurCabine: ["couleur cabine", "couleur de cabine", "couleur de la cabine", "couleur cab", "cabin color"],
   [CHAMP_DATE]: ["date d arrivee prevue", "date arrivee prevue", "date d arrivee", "date arrivee", "date prevue"],
   type: ["type"],
   emplacement: ["emplacement", "emplacement prevu", "site"],
@@ -602,9 +626,25 @@ const ALIAS_COLONNES = {
   prix: ["prix", "prix prevu", "prix fcfa"],
 };
 
+// Mots-clés de couleurs courantes (carrosserie automobile), utilisés pour
+// reconnaître une colonne "couleur" par son CONTENU quand l'en-tête seul
+// ne suffit pas — voir stock.js pour le détail des commentaires (logique
+// identique).
+const MOTS_COULEUR = [
+  "blanc", "blanche", "noir", "noire", "gris", "grise", "argent", "argente", "argentee",
+  "rouge", "bleu", "bleue", "vert", "verte", "jaune", "orange", "marron", "beige",
+  "dore", "doree", "bordeaux", "violet", "violette", "rose", "cuivre", "chrome",
+  "ivoire", "creme", "bronze", "metallise", "metallisee", "perle", "nacre", "kaki", "turquoise",
+];
+
 function normaliser(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
+
+const estCouleur = (v) => {
+  const n = normaliser(v);
+  return MOTS_COULEUR.some((m) => n.includes(m));
+};
 
 function detecterColonnesParEntete(entete) {
   const mapping = {};
@@ -675,17 +715,25 @@ function detecterColonnesParContenu(lignes) {
     champsPris.add(s.champ);
   }
 
-  // Colonnes textuelles restantes (ni numériques ni déjà assignées) : on
-  // suppose que ce sont des couleurs (aucun contenu-signature fiable pour
-  // les distinguer autrement), dans l'ordre où elles apparaissent.
-  const champsCouleur = ["couleurExt", "couleurInt"];
-  for (let c = 0; c < nbCol && champsCouleur.length; c++) {
+  // Colonnes couleur restantes, reconnues par leur CONTENU (mots-clés
+  // couleur), pas simplement "colonne de texte non attribuée" — évite
+  // d'absorber par erreur une colonne sans rapport (immatriculation…).
+  const colonnesCouleur = [];
+  for (let c = 0; c < nbCol; c++) {
     if (mappingParColonne[c]) continue;
     const valeurs = echantillon.map((l) => (l[c] || "").trim()).filter(Boolean);
     if (valeurs.length === 0) continue;
-    const toutNumerique = valeurs.every((v) => estNombre(v));
-    if (toutNumerique) continue; // probablement une colonne numérique non reconnue (n° de ligne…) -> ignorée
-    mappingParColonne[c] = champsCouleur.shift();
+    const scoreCouleur = valeurs.filter(estCouleur).length / valeurs.length;
+    if (scoreCouleur >= 0.5) colonnesCouleur.push(c);
+  }
+  if (colonnesCouleur.length >= 2) {
+    mappingParColonne[colonnesCouleur[0]] = "couleurExt";
+    mappingParColonne[colonnesCouleur[1]] = "couleurInt";
+  } else if (colonnesCouleur.length === 1) {
+    // Une seule colonne couleur : son sens dépend du TYPE de chaque ligne
+    // (cabine pour camion/camionnette, sinon extérieure) — résolu ligne
+    // par ligne dans construireDonnees().
+    mappingParColonne[colonnesCouleur[0]] = "couleurUnique";
   }
 
   return mappingParColonne;
@@ -700,14 +748,18 @@ function construireDonnees(lignesDonnees, mappingParColonne) {
       return idx === -1 ? "" : (l[idx] || "").trim();
     };
     const marque = normaliserMarque(val("marque"));
+    const type = val("type") || typeAutomatique(marque) || "";
+    const camion = estTypeCamion(type);
+    const couleurUnique = val("couleurUnique");
     return {
       chassis: val("chassis"),
       marque,
       modele: normaliserModele(marque, val("modele"), false),
-      couleurExt: val("couleurExt"),
-      couleurInt: val("couleurInt"),
+      couleurExt: camion ? "" : (val("couleurExt") || (couleurUnique ? couleurUnique : "")),
+      couleurInt: camion ? "" : val("couleurInt"),
+      couleurCabine: camion ? (val("couleurCabine") || couleurUnique) : "",
       [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
-      type: val("type") || typeAutomatique(marque) || "",
+      type,
       emplacement: val("emplacement"),
       annee: Number(val("annee")) || null,
       prix: Number(val("prix")) || null,
@@ -884,7 +936,7 @@ function afficherChampsManquants() {
 }
 
 function estLigneValide(d) {
-  return !!(d.chassis && d.marque && d.modele && d.couleurExt && d.couleurInt);
+  return !!(d.chassis && d.marque && d.modele && couleursValides(d));
 }
 
 // Affiche, au-dessus de l'aperçu, une liste déroulante par colonne du
@@ -933,7 +985,7 @@ function afficherMapping() {
 
 const COLONNES_APERCU = [
   ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
-  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], [CHAMP_DATE, "Arrivée prévue"],
+  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], ["couleurCabine", "Coul. cabine"], [CHAMP_DATE, "Arrivée prévue"],
   ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
 ];
 

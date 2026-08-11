@@ -1,6 +1,7 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement, vendreVehicule,
-  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteEnDoublonReel, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
+  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteEnDoublonReel, typeAutomatique, estTypeCamion, couleursValides,
+  STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
   importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond, normaliserDateTexte,
   televerserFichier, demanderTransfertVehicule, annulerDemandeTransfert,
 } from "./data.js";
@@ -15,6 +16,19 @@ window.onMarqueChange = function () {
   sel.innerHTML = modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
   const typeAuto = typeAutomatique(marque);
   if (typeAuto) document.getElementById("v-type").value = typeAuto;
+  onTypeChange();
+};
+
+// Camion / camionnette n'ont qu'une seule "couleur de cabine" ; tous les
+// autres types (SUV, Pick-up, Berline, Citadine — "petites voitures")
+// gardent couleur extérieure + intérieure séparées. On bascule les champs
+// visibles du formulaire selon le type choisi.
+window.onTypeChange = function () {
+  const type = document.getElementById("v-type").value;
+  const camion = estTypeCamion(type);
+  document.getElementById("v-couleurExt-wrap").style.display = camion ? "none" : "";
+  document.getElementById("v-couleurInt-wrap").style.display = camion ? "none" : "";
+  document.getElementById("v-couleurCabine-wrap").style.display = camion ? "" : "none";
 };
 
 // ---------------------------------------------------------------
@@ -166,7 +180,7 @@ function ligneTableau(v) {
       <td>${esc(v.modele) || "—"}</td>
       <td>${esc(v.type) || "—"}</td>
       <td>${esc(v.emplacement) || "—"}</td>
-      <td style="font-size:12px;">Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}</td>
+      <td style="font-size:12px;">${v.type && estTypeCamion(v.type) ? `Cabine : ${esc(v.couleurCabine) || "—"}` : `Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}`}</td>
       <td>${esc(v.annee) || "—"}</td>
       <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}${tagTransfert}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
@@ -344,9 +358,11 @@ async function ouvrirEdition(id, statutForce) {
   set("v-chassis", v.chassis); set("v-immatriculation", v.immatriculation);
   set("v-marque", v.marque); onMarqueChange(); set("v-modele", v.modele); set("v-type", v.type);
   set("v-annee", v.annee); set("v-couleurExt", v.couleurExt); set("v-couleurInt", v.couleurInt);
+  set("v-couleurCabine", v.couleurCabine);
   set("v-emplacement", v.emplacement); set("v-statut", statutForce || v.statut);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
   set("v-dateEntree", v.dateEntree);
+  onTypeChange();
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
       const cb = document.querySelector(`[data-equip="${nom}"]`);
@@ -372,16 +388,22 @@ function lireEquipements() {
 window.enregistrerVehicule = async function () {
   const id = document.getElementById("v-id").value;
   const statut = document.getElementById("v-statut").value;
+  const type = document.getElementById("v-type").value;
+  const camion = estTypeCamion(type);
 
   const donnees = {
     chassis: document.getElementById("v-chassis").value.trim(),
     immatriculation: document.getElementById("v-immatriculation").value.trim(),
     marque: document.getElementById("v-marque").value,
     modele: document.getElementById("v-modele").value.trim(),
-    type: document.getElementById("v-type").value,
+    type,
     annee: Number(document.getElementById("v-annee").value) || null,
-    couleurExt: document.getElementById("v-couleurExt").value,
-    couleurInt: document.getElementById("v-couleurInt").value,
+    // Un seul des deux jeux de champs couleur est pertinent selon le type
+    // (camion/camionnette = couleur de cabine ; les autres = ext. + int.) —
+    // on n'enregistre que celui qui s'applique, l'autre reste vide.
+    couleurExt: camion ? "" : document.getElementById("v-couleurExt").value,
+    couleurInt: camion ? "" : document.getElementById("v-couleurInt").value,
+    couleurCabine: camion ? document.getElementById("v-couleurCabine").value : "",
     emplacement: document.getElementById("v-emplacement").value,
     statut,
     prix: Number(document.getElementById("v-prix").value) || null,
@@ -390,7 +412,14 @@ window.enregistrerVehicule = async function () {
     equipements: lireEquipements(),
   };
 
-  if (!donnees.chassis || !donnees.modele) { toast("Châssis et modèle sont requis", "terr"); return; }
+  if (!donnees.chassis || !donnees.marque || !donnees.modele || !donnees.dateEntree) {
+    toast("Châssis, marque, modèle et date d'entrée sont requis", "terr");
+    return;
+  }
+  if (!couleursValides(donnees)) {
+    toast(camion ? "La couleur de cabine est requise" : "Les couleurs extérieure et intérieure sont requises", "terr");
+    return;
+  }
 
   // Un châssis déjà présent dans "Prochain arrivage" n'est PAS bloqué ici :
   // c'est l'arrivée attendue de ce véhicule qui se concrétise. creerVehicule()
@@ -403,6 +432,7 @@ window.enregistrerVehicule = async function () {
 
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
+  memoriserCouleur(donnees.couleurCabine);
 
   let retireDePrelisteArrivage = false;
   if (id) {
@@ -772,8 +802,8 @@ window.exporterCSV = function () {
 
 window.exporterTouteLaBase = function () {
   if (_vehicules.length === 0) { toast("Aucun véhicule dans la base", "tinfo"); return; }
-  const headers = ["Châssis", "Immatriculation", "Marque", "Modèle", "Type", "Emplacement", "Année", "Couleur ext.", "Couleur int.", "Statut", "Prix", "Kilométrage", "Date entrée", "Client", "Contact client", "Date achat"];
-  const rows = _vehicules.map((v) => [v.chassis, v.immatriculation, v.marque, v.modele, v.type, v.emplacement, v.annee, v.couleurExt, v.couleurInt, STATUT_LABEL[v.statut] || v.statut, v.prix, v.kilometrage, v.dateEntree, v.client?.nom, v.client?.contact, v.client?.dateAchat]);
+  const headers = ["Châssis", "Immatriculation", "Marque", "Modèle", "Type", "Emplacement", "Année", "Couleur ext.", "Couleur int.", "Couleur cabine", "Statut", "Prix", "Kilométrage", "Date entrée", "Client", "Contact client", "Date achat"];
+  const rows = _vehicules.map((v) => [v.chassis, v.immatriculation, v.marque, v.modele, v.type, v.emplacement, v.annee, v.couleurExt, v.couleurInt, v.couleurCabine, STATUT_LABEL[v.statut] || v.statut, v.prix, v.kilometrage, v.dateEntree, v.client?.nom, v.client?.contact, v.client?.dateAchat]);
   exportCSV(`base_complete_parc_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 };
 
@@ -874,6 +904,8 @@ const CHAMPS_IMPORT = [
   { cle: "type", label: "Type" },
   { cle: "couleurExt", label: "Couleur ext." },
   { cle: "couleurInt", label: "Couleur int." },
+  { cle: "couleurCabine", label: "Couleur cabine" },
+  { cle: "couleurUnique", label: "Couleur (ext./cabine selon le type)" },
   { cle: "emplacement", label: "Emplacement" },
   { cle: CHAMP_DATE, label: "Date d'entrée" },
   { cle: "annee", label: "Année" },
@@ -886,6 +918,7 @@ const ALIAS_COLONNES = {
   modele: ["modele", "modèle"],
   couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color"],
   couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
+  couleurCabine: ["couleur cabine", "couleur de cabine", "couleur de la cabine", "couleur cab", "cabin color"],
   [CHAMP_DATE]: ["date d entree", "date entree", "date entree en stock", "date d entree en stock"],
   type: ["type"],
   emplacement: ["emplacement", "emplacement prevu", "site"],
@@ -893,9 +926,28 @@ const ALIAS_COLONNES = {
   prix: ["prix", "prix prevu", "prix fcfa"],
 };
 
+// Mots-clés de couleurs courantes (carrosserie automobile), utilisés pour
+// reconnaître une colonne "couleur" par son CONTENU quand l'en-tête seul
+// ne suffit pas (en-tête absent, générique "Couleur", ou fichier sans
+// en-tête). Bien plus fiable que l'ancien repli ("n'importe quelle
+// colonne de texte restante"), qui pouvait absorber par erreur une
+// colonne sans rapport (immatriculation, client…) et faire passer
+// n'importe quoi pour une couleur.
+const MOTS_COULEUR = [
+  "blanc", "blanche", "noir", "noire", "gris", "grise", "argent", "argente", "argentee",
+  "rouge", "bleu", "bleue", "vert", "verte", "jaune", "orange", "marron", "beige",
+  "dore", "doree", "bordeaux", "violet", "violette", "rose", "cuivre", "chrome",
+  "ivoire", "creme", "bronze", "metallise", "metallisee", "perle", "nacre", "kaki", "turquoise",
+];
+
 function normaliser(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
+
+const estCouleur = (v) => {
+  const n = normaliser(v);
+  return MOTS_COULEUR.some((m) => n.includes(m));
+};
 
 function detecterColonnesParEntete(entete) {
   const mapping = {};
@@ -959,14 +1011,28 @@ function detecterColonnesParContenu(lignes) {
     champsPris.add(s.champ);
   }
 
-  const champsCouleur = ["couleurExt", "couleurInt"];
-  for (let c = 0; c < nbCol && champsCouleur.length; c++) {
+  // Colonnes couleur restantes, reconnues par leur CONTENU (mots-clés
+  // couleur), pas simplement "colonne de texte non attribuée" — voir
+  // MOTS_COULEUR ci-dessus.
+  const colonnesCouleur = [];
+  for (let c = 0; c < nbCol; c++) {
     if (mappingParColonne[c]) continue;
     const valeurs = echantillon.map((l) => (l[c] || "").trim()).filter(Boolean);
     if (valeurs.length === 0) continue;
-    const toutNumerique = valeurs.every((v) => estNombre(v));
-    if (toutNumerique) continue;
-    mappingParColonne[c] = champsCouleur.shift();
+    const scoreCouleur = valeurs.filter(estCouleur).length / valeurs.length;
+    if (scoreCouleur >= 0.5) colonnesCouleur.push(c);
+  }
+  if (colonnesCouleur.length >= 2) {
+    // Deux colonnes couleur : convention habituelle des fichiers du parc
+    // (extérieure puis intérieure), dans l'ordre où elles apparaissent.
+    mappingParColonne[colonnesCouleur[0]] = "couleurExt";
+    mappingParColonne[colonnesCouleur[1]] = "couleurInt";
+  } else if (colonnesCouleur.length === 1) {
+    // Une seule colonne couleur : son sens dépend du TYPE de chaque ligne
+    // (couleur de cabine pour un camion/camionnette, sinon couleur
+    // extérieure) — résolu ligne par ligne dans construireDonnees(), pas
+    // ici où on ne connaît encore que la colonne, pas la ligne.
+    mappingParColonne[colonnesCouleur[0]] = "couleurUnique";
   }
 
   return mappingParColonne;
@@ -979,14 +1045,18 @@ function construireDonnees(lignesDonnees, mappingParColonne) {
       return idx === -1 ? "" : (l[idx] || "").trim();
     };
     const marque = normaliserMarque(val("marque"));
+    const type = val("type") || typeAutomatique(marque) || "";
+    const camion = estTypeCamion(type);
+    const couleurUnique = val("couleurUnique");
     return {
       chassis: val("chassis"),
       marque,
       modele: normaliserModele(marque, val("modele"), true),
-      couleurExt: val("couleurExt"),
-      couleurInt: val("couleurInt"),
+      couleurExt: camion ? "" : (val("couleurExt") || (couleurUnique ? couleurUnique : "")),
+      couleurInt: camion ? "" : val("couleurInt"),
+      couleurCabine: camion ? (val("couleurCabine") || couleurUnique) : "",
       [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
-      type: val("type") || typeAutomatique(marque) || "",
+      type,
       emplacement: val("emplacement"),
       annee: Number(val("annee")) || null,
       prix: Number(val("prix")) || null,
@@ -1160,7 +1230,7 @@ function afficherChampsManquants() {
 }
 
 function estLigneValide(d) {
-  return !!(d.chassis && d.marque && d.modele && d.couleurExt && d.couleurInt && d[CHAMP_DATE] && !estModeleGenerique(d.marque, d.modele));
+  return !!(d.chassis && d.marque && d.modele && couleursValides(d) && d[CHAMP_DATE] && !estModeleGenerique(d.marque, d.modele));
 }
 
 function afficherMapping() {
@@ -1202,7 +1272,7 @@ function afficherMapping() {
 
 const COLONNES_APERCU = [
   ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
-  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], [CHAMP_DATE, "Date d'entrée"],
+  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], ["couleurCabine", "Coul. cabine"], [CHAMP_DATE, "Date d'entrée"],
   ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
 ];
 

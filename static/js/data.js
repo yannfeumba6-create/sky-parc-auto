@@ -151,6 +151,22 @@ export function typeAutomatique(marque) {
   return null;
 }
 
+// Camion et camionnette n'ont qu'une seule couleur pertinente (la cabine)
+// au lieu de couleur extérieure + intérieure séparées comme les autres
+// types de véhicule ("petites voitures" : SUV, Pick-up, Berline, Citadine).
+export function estTypeCamion(type) {
+  return type === "Camion" || type === "Camionnette";
+}
+
+// Vérifie que le/les champ(s) couleur requis pour CE type de véhicule
+// sont bien renseignés — couleur de cabine pour camion/camionnette,
+// couleur ext. + int. pour tous les autres types.
+export function couleursValides(donnees) {
+  return estTypeCamion(donnees.type)
+    ? !!donnees.couleurCabine
+    : !!(donnees.couleurExt && donnees.couleurInt);
+}
+
 // Écoute en temps réel (affiche d'abord le cache local instantanément, puis
 // se met à jour dès que le serveur répond — beaucoup plus rapide à l'écran
 // qu'un chargement à chaque visite de page).
@@ -722,7 +738,7 @@ export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !couleursValides(donnees)) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;
@@ -783,7 +799,7 @@ export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || !donnees.couleurInt || !donnees.dateEntree) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !couleursValides(donnees) || !donnees.dateEntree) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;
