@@ -301,7 +301,7 @@
               <option value="Showroom Bafoussam">Showroom Bafoussam</option>
             </select>
           </div>
-          <div class="form-group"><label>Chauffeur (a conduit le véhicule) *</label><input type="text" id="s-chauffeur" required placeholder="Nom du chauffeur"></div>
+          <div class="form-group"><label>Chauffeur (a conduit le véhicule)</label><input type="text" id="s-chauffeur" placeholder="Nom du chauffeur (optionnel)"></div>
         </div>
         <div id="s-equip-wrap" style="display:none;">
           <div class="divider"></div>
@@ -313,6 +313,32 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-sortie')">Annuler</button>
       <button class="btn btn-red" onclick="confirmerSortie()">Confirmer la sortie</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL — Demande de transfert (étape préalable avant la sortie réelle) -->
+<div class="modal-bg" id="modal-demande-transfert">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="dt-titre">DEMANDE DE TRANSFERT</div><button class="modal-close" onclick="closeModal('modal-demande-transfert')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Nom du client</label><input type="text" id="dt-client" placeholder="Optionnel"></div>
+        <div class="form-group">
+          <label>Showroom de destination *</label>
+          <select id="dt-destination" required>
+            <option value="">— Choisir —</option>
+            <option value="Showroom Douala">Showroom Douala</option>
+            <option value="Showroom Yaoundé">Showroom Yaoundé</option>
+            <option value="Showroom Bafoussam">Showroom Bafoussam</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Date *</label><input type="date" id="dt-date" required></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-demande-transfert')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerDemandeTransfert()">Enregistrer la demande</button>
     </div>
   </div>
 </div>

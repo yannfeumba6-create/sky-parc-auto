@@ -231,12 +231,58 @@ export function normaliserChassis(c) {
   return (c || "").trim().toUpperCase();
 }
 
-export async function chassisExisteDeja(chassis, excludeId) {
+// Toutes les collections où un châssis peut légitimement se trouver dans
+// l'appli — un même véhicule ne doit jamais exister en double, y compris
+// à cheval sur deux volets différents (Stock parc, Prochain arrivage,
+// Stock Showroom, Véhicules vendus).
+function collectionsAvecChassis() {
+  return [vehiculesRef, arrivagesRef, showroomRef, archivesRef];
+}
+
+export async function chassisConnusExistants() {
+  await authPrete;
+  const snaps = await Promise.all(collectionsAvecChassis().map((ref) => getDocs(ref)));
+  const set = new Set();
+  snaps.forEach((snap) => snap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); }));
+  return set;
+}
+
+// Vérifie si un châssis existe déjà QUELQUE PART dans l'appli. Utilisée
+// pour bloquer automatiquement toute création ou tout enregistrement en
+// double, quel que soit le sous-volet où l'utilisateur essaie de le
+// faire.
+export async function chassisExisteQuelquePart(chassis, excludeId) {
   await authPrete;
   if (!chassis) return false;
-  const q = query(vehiculesRef, where("chassis", "==", normaliserChassis(chassis)));
-  const snap = await getDocs(q);
-  return snap.docs.some((d) => d.id !== excludeId);
+  const chassisKey = normaliserChassis(chassis);
+  const snaps = await Promise.all(
+    collectionsAvecChassis().map((ref) => getDocs(query(ref, where("chassis", "==", chassisKey))))
+  );
+  return snaps.some((snap) => snap.docs.some((d) => d.id !== excludeId));
+}
+
+// Alias conservés pour compatibilité — vérifient désormais partout,
+// pas seulement dans leur collection d'origine.
+export async function chassisExisteDeja(chassis, excludeId) {
+  return chassisExisteQuelquePart(chassis, excludeId);
+}
+
+// Vérifie un doublon RÉEL avant d'enregistrer un véhicule en Stock : le
+// châssis existe déjà physiquement au Parc, en Showroom, ou est déjà
+// Vendu. Volontairement SANS "Prochain arrivage" — y retrouver le même
+// châssis n'est pas un doublon, c'est l'arrivée attendue de ce véhicule
+// qui se concrétise (saisie manuelle, ou import). creerVehicule() retire
+// alors automatiquement l'entrée correspondante de la pré-liste (voir
+// retirerArrivageParChassis) au lieu de refuser l'enregistrement.
+export async function chassisExisteEnDoublonReel(chassis, excludeId) {
+  await authPrete;
+  if (!chassis) return false;
+  const chassisKey = normaliserChassis(chassis);
+  const collections = [vehiculesRef, showroomRef, archivesRef];
+  const snaps = await Promise.all(
+    collections.map((ref) => getDocs(query(ref, where("chassis", "==", chassisKey))))
+  );
+  return snaps.some((snap) => snap.docs.some((d) => d.id !== excludeId));
 }
 
 export async function creerVehicule(donnees) {
@@ -248,8 +294,8 @@ export async function creerVehicule(donnees) {
   const ref = await addDoc(vehiculesRef, donnees);
   await enregistrerHistorique("Entrée en stock", { id: ref.id, ...donnees });
   await ajusterStockEquipements({}, donnees.equipements);
-  await retirerArrivageParChassis(donnees.chassis);
-  return ref.id;
+  const retireDePrelisteArrivage = (await retirerArrivageParChassis(donnees.chassis)) > 0;
+  return { id: ref.id, retireDePrelisteArrivage };
 }
 
 // Si un véhicule portant ce châssis existe encore dans la pré-liste
@@ -258,12 +304,13 @@ export async function creerVehicule(donnees) {
 // la pré-liste elle-même.
 export async function retirerArrivageParChassis(chassis) {
   await authPrete;
-  if (!chassis) return;
+  if (!chassis) return 0;
   const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
   for (const d of snap.docs) {
     await deleteDoc(doc(db, "prochains_arrivages", d.id));
   }
+  return snap.docs.length;
 }
 
 // Écoute en temps réel du stock d'équipements — à utiliser à la place d'un
@@ -346,6 +393,7 @@ export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
   const equipementsSortie = sortieInfo.equipements || vehiculeOriginal.equipements || {};
   await ajusterStockEquipements(vehiculeOriginal.equipements || {}, equipementsSortie);
   const { id, ...donnees } = vehiculeOriginal;
+  delete donnees.demandeTransfert;
   await addDoc(showroomRef, {
     ...donnees,
     equipements: equipementsSortie,
@@ -358,6 +406,41 @@ export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
   });
   await deleteDoc(doc(db, "vehicules", id));
   await enregistrerHistorique("Sortie vers showroom", { ...vehiculeOriginal, destination: sortieInfo.destination });
+}
+
+// ---------------------------------------------------------------
+// Demande de transfert — étape préalable, non destructive, avant un
+// envoi réel vers un showroom. Le véhicule reste dans Stock véhicule
+// mais porte désormais un indicateur "demandeTransfert" (destination,
+// client facultatif, date) qui le fait remonter en haut du tableau et
+// le met en évidence (vert clignotant les 30 premières minutes, puis
+// fixe) jusqu'à ce que le transfert soit réellement confirmé — via
+// "Confirmer le transfert", qui réutilise envoyerVersShowroom : le
+// champ demandeTransfert disparaît alors avec le véhicule, qui quitte
+// la collection Stock.
+// ---------------------------------------------------------------
+
+export async function demanderTransfertVehicule(vehicule, donnees) {
+  await authPrete;
+  const demandeTransfert = {
+    client: (donnees.client || "").trim(),
+    destination: donnees.destination,
+    date: donnees.date,
+    demandeLe: serverTimestamp(),
+    demandePar: window.UTILISATEUR || "",
+  };
+  await updateDoc(doc(db, "vehicules", vehicule.id), { demandeTransfert });
+  await enregistrerHistorique("Demande de transfert", {
+    chassis: vehicule.chassis, marque: vehicule.marque, modele: vehicule.modele,
+    emplacement: donnees.destination, statut: vehicule.statut, prix: vehicule.prix,
+    client: donnees.client ? { nom: donnees.client } : null,
+  });
+}
+
+export async function annulerDemandeTransfert(vehicule) {
+  await authPrete;
+  await updateDoc(doc(db, "vehicules", vehicule.id), { demandeTransfert: null });
+  await enregistrerHistorique("Annulation demande de transfert", vehicule);
 }
 
 export async function ecouterShowroom(callback) {
@@ -597,12 +680,9 @@ export async function supprimerArrivage(id) {
   await deleteDoc(doc(db, "prochains_arrivages", id));
 }
 
+// Alias conservé pour compatibilité — vérifie désormais partout.
 export async function arrivageChassisExisteDeja(chassis, excludeId) {
-  await authPrete;
-  if (!chassis) return false;
-  const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
-  const snap = await getDocs(q);
-  return snap.docs.some((d) => d.id !== excludeId);
+  return chassisExisteQuelquePart(chassis, excludeId);
 }
 
 // ---------------------------------------------------------------
@@ -613,20 +693,11 @@ export async function arrivageChassisExisteDeja(chassis, excludeId) {
 // de 300 allers-retours réseau pour 150 lignes -> import qui semblait
 // figé pendant de longues minutes.
 //
-// Ici, on récupère UNE SEULE FOIS la liste des châssis déjà connus
-// (stock + arrivages), puis on écrit tout en un lot groupé (writeBatch),
-// avec un seul commit réseau par tranche de 450 lignes (limite Firestore
-// = 500 opérations par batch).
+// Ici, on récupère UNE SEULE FOIS la liste des châssis déjà connus dans
+// TOUS les volets (parc, arrivages, showroom, vendus), puis on écrit
+// tout en un lot groupé (writeBatch), avec un seul commit réseau par
+// tranche de 450 lignes (limite Firestore = 500 opérations par batch).
 // ---------------------------------------------------------------
-
-export async function chassisConnusExistants() {
-  await authPrete;
-  const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
-  const set = new Set();
-  vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); });
-  arrSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) set.add(c); });
-  return set;
-}
 
 export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
   await authPrete;
@@ -679,9 +750,17 @@ export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
 // nécessaire ici.
 export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
   await authPrete;
-  const [vehSnap, arrSnap] = await Promise.all([getDocs(vehiculesRef), getDocs(arrivagesRef)]);
+  const [vehSnap, arrSnap, showroomSnap, archivesSnap] = await Promise.all([
+    getDocs(vehiculesRef), getDocs(arrivagesRef), getDocs(showroomRef), getDocs(archivesRef),
+  ]);
   const existants = new Set();
+  // Un châssis déjà au Stock parc, en Showroom ou dans Véhicules vendus
+  // est un vrai doublon. Un châssis présent dans "Prochain arrivage" n'en
+  // est PAS un : c'est l'arrivée attendue de ce même véhicule qui se
+  // concrétise (son arrivage est alors automatiquement supprimé plus bas).
   vehSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) existants.add(c); });
+  showroomSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) existants.add(c); });
+  archivesSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) existants.add(c); });
   const arrivageIdParChassis = new Map();
   arrSnap.docs.forEach((d) => { const c = normaliserChassis(d.data().chassis); if (c) arrivageIdParChassis.set(c, d.id); });
 
@@ -741,6 +820,9 @@ export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
 // puis retire l'entrée de la pré-liste.
 export async function entrerArrivageEnStock(arrivage, dateEntreeReelle) {
   await authPrete;
+  if (await chassisExisteQuelquePart(arrivage.chassis, arrivage.id)) {
+    throw new Error("Ce châssis existe déjà ailleurs dans l'application (Stock parc, Showroom ou Véhicules vendus) — entrée en stock refusée pour éviter un doublon.");
+  }
   const { id, dateArriveePrevue, ...donnees } = arrivage;
   donnees.dateEntree = dateEntreeReelle;
   donnees.statut = "stock";

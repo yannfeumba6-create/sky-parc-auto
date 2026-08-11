@@ -1,8 +1,8 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement, vendreVehicule,
-  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
+  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteEnDoublonReel, typeAutomatique, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
   importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond, normaliserDateTexte,
-  televerserFichier,
+  televerserFichier, demanderTransfertVehicule, annulerDemandeTransfert,
 } from "./data.js";
 
 let _vehicules = [];
@@ -96,7 +96,7 @@ function vehiculesFiltres() {
   const date = document.getElementById("f-date").value;
   const periode = document.getElementById("f-periode").value;
 
-  return _vehicules.filter((v) => {
+  const resultat = _vehicules.filter((v) => {
     if (["endommage", "prise_en_charge", "repare", "reserve"].includes(v.statut)) return false;
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
@@ -109,6 +109,19 @@ function vehiculesFiltres() {
     }
     return true;
   });
+
+  // Un véhicule avec une demande de transfert en attente remonte
+  // automatiquement en haut du tableau (tri stable : l'ordre normal est
+  // conservé entre eux et pour le reste de la liste).
+  return resultat.sort((a, b) => (b.demandeTransfert ? 1 : 0) - (a.demandeTransfert ? 1 : 0));
+}
+
+// Minutes écoulées depuis la création d'une demande de transfert — sert à
+// savoir si la ligne doit encore clignoter (< 30 min) ou rester fixe.
+function minutesDepuisDemande(demandeTransfert) {
+  const d = demandeTransfert?.demandeLe?.toDate ? demandeTransfert.demandeLe.toDate() : null;
+  if (!d) return 0; // pas encore synchronisé depuis le serveur : traité comme "à l'instant"
+  return (Date.now() - d.getTime()) / 60000;
 }
 
 function rafraichirFiltreModeles() {
@@ -133,8 +146,20 @@ function ligneTableau(v) {
   const jours = joursDepuis(v.dateEntree);
   const critique = v.statut === "stock" && jours !== null && jours >= 60;
   const coche = _selection.has(v.id) ? "checked" : "";
+
+  let classeTransfert = "";
+  let tagTransfert = "";
+  if (v.demandeTransfert) {
+    const enClignotement = minutesDepuisDemande(v.demandeTransfert) < 30;
+    classeTransfert = enClignotement ? "ligne-transfert-clignote" : "ligne-transfert-attente";
+    const infosBulle = `Demande de transfert vers ${v.demandeTransfert.destination || "—"}` +
+      (v.demandeTransfert.client ? ` — client : ${v.demandeTransfert.client}` : "") +
+      (v.demandeTransfert.date ? ` — prévu le ${v.demandeTransfert.date}` : "");
+    tagTransfert = `<br><span class="tag badge-reserve" title="${esc(infosBulle)}">↗ ${esc(v.demandeTransfert.destination) || "Transfert demandé"}</span>`;
+  }
+
   return `
-    <tr data-id="${v.id}">
+    <tr data-id="${v.id}" class="${classeTransfert}">
       <td><input type="checkbox" class="select-ligne" data-id="${v.id}" ${coche}></td>
       <td class="plate">${esc(chassis6(v.chassis))}</td>
       <td>${esc(v.marque) || "—"}</td>
@@ -143,7 +168,7 @@ function ligneTableau(v) {
       <td>${esc(v.emplacement) || "—"}</td>
       <td style="font-size:12px;">Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}</td>
       <td>${esc(v.annee) || "—"}</td>
-      <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}</td>
+      <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}${tagTransfert}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
       <td>${esc(v.dateEntree) || "—"}</td>
       <td style="white-space:nowrap;">
@@ -152,6 +177,9 @@ function ligneTableau(v) {
         ${v.statut === "reserve" ? `<button class="btn btn-ghost btn-sm" data-action="lever-reserve" data-id="${v.id}">Lever réservation</button>` : ""}
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
+        ${!v.demandeTransfert ? `<button class="btn btn-ghost btn-sm" data-action="demande-transfert" data-id="${v.id}">Demande de transfert</button>` : `
+          <button class="btn btn-red btn-sm" data-action="confirmer-transfert-demande" data-id="${v.id}">Confirmer le transfert</button>
+          <button class="btn btn-ghost btn-sm" data-action="annuler-transfert-demande" data-id="${v.id}">Annuler la demande</button>`}
         <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie vers showroom</button>
         <button class="btn btn-red btn-sm" data-action="vendre" data-id="${v.id}">Vendre</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
@@ -169,6 +197,14 @@ function rendreTableau() {
   }
   rendreBarreSelection();
 }
+
+// Une demande de transfert doit passer de "clignotant" à "fixe" toute
+// seule au bout de 30 minutes, même sans nouvelle donnée reçue du
+// serveur (rien ne change côté Firestore à ce moment-là) — on revérifie
+// donc périodiquement s'il y a au moins une demande encore en attente.
+setInterval(() => {
+  if (_vehicules.some((v) => v.demandeTransfert)) rendreTableau();
+}, 20000);
 
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
   document.getElementById(id).addEventListener("input", rendreTableau);
@@ -356,18 +392,29 @@ window.enregistrerVehicule = async function () {
 
   if (!donnees.chassis || !donnees.modele) { toast("Châssis et modèle sont requis", "terr"); return; }
 
-  if (await chassisExisteDeja(donnees.chassis, id)) {
-    toast("Ce châssis existe déjà dans le parc", "terr");
+  // Un châssis déjà présent dans "Prochain arrivage" n'est PAS bloqué ici :
+  // c'est l'arrivée attendue de ce véhicule qui se concrétise. creerVehicule()
+  // retire automatiquement l'entrée correspondante de la pré-liste plus bas.
+  // Seul un doublon RÉEL (déjà au Parc, en Showroom, ou déjà Vendu) est refusé.
+  if (await chassisExisteEnDoublonReel(donnees.chassis, id)) {
+    toast("Ce châssis existe déjà (Stock, Showroom ou Véhicules vendus)", "terr");
     return;
   }
 
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
 
-  if (id) await majVehicule(id, donnees);
-  else await creerVehicule(donnees);
+  let retireDePrelisteArrivage = false;
+  if (id) {
+    await majVehicule(id, donnees);
+  } else {
+    const resultat = await creerVehicule(donnees);
+    retireDePrelisteArrivage = resultat.retireDePrelisteArrivage;
+  }
 
-  toast("Véhicule enregistré");
+  toast(retireDePrelisteArrivage
+    ? "Véhicule entré en stock — retiré automatiquement de Prochain arrivage"
+    : "Véhicule enregistré");
   closeModal("modal-vehicule");
 };
 
@@ -397,6 +444,19 @@ document.addEventListener("click", async (e) => {
   }
   if (action === "sortir") {
     ouvrirModalSortie(id);
+  }
+  if (action === "demande-transfert") {
+    ouvrirModalDemandeTransfert(id);
+  }
+  if (action === "confirmer-transfert-demande") {
+    ouvrirModalSortie(id); // pré-rempli avec la destination/date de la demande
+  }
+  if (action === "annuler-transfert-demande") {
+    const v = _vehicules.find((x) => x.id === id);
+    if (!v) return;
+    if (!confirm(`Annuler la demande de transfert de "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ?`)) return;
+    await annulerDemandeTransfert(v);
+    toast("Demande de transfert annulée");
   }
   if (action === "vendre") {
     ouvrirModalVenteParc(id);
@@ -464,8 +524,11 @@ function ouvrirModalSortie(id) {
   if (!v) return;
   _sortieCible = { type: "single", id };
   document.getElementById("sortie-modal-title").textContent = `SORTIE VERS SHOWROOM — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
-  document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
-  document.getElementById("s-destination").value = "";
+  // Si une demande de transfert est en attente pour ce véhicule, on
+  // pré-remplit la destination et la date déjà renseignées — l'utilisateur
+  // n'a plus qu'à compléter la checklist matériel et confirmer.
+  document.getElementById("s-dateSortie").value = v.demandeTransfert?.date || new Date().toISOString().slice(0, 10);
+  document.getElementById("s-destination").value = v.demandeTransfert?.destination || "";
   document.getElementById("s-chauffeur").value = "";
   document.getElementById("s-equip-wrap").style.display = "block";
   remplirEquipGridSortie(v);
@@ -488,7 +551,6 @@ window.confirmerSortie = async function () {
   const chauffeur = document.getElementById("s-chauffeur").value.trim();
   if (!dateSortie) { toast("La date de sortie est obligatoire", "terr"); return; }
   if (!destination) { toast("La destination est obligatoire", "terr"); return; }
-  if (!chauffeur) { toast("Le nom du chauffeur est obligatoire", "terr"); return; }
   if (!_sortieCible) return;
 
   if (_sortieCible.type === "single") {
@@ -555,6 +617,41 @@ window.confirmerVenteParc = async function () {
   toast("Véhicule vendu — visible dans Véhicules vendus");
   closeModal("modal-vente-parc");
   _venteParcCible = null;
+};
+
+// ---------------------------------------------------------------
+// Demande de transfert — étape préalable avant l'envoi réel vers un
+// showroom (voir "sortir" / confirmerSortie plus haut). Le véhicule
+// reste en Stock véhicule mais remonte en haut du tableau et est mis en
+// évidence (vert clignotant 30 min puis fixe) jusqu'à confirmation.
+// ---------------------------------------------------------------
+
+let _demandeTransfertCible = null;
+
+function ouvrirModalDemandeTransfert(id) {
+  const v = _vehicules.find((x) => x.id === id);
+  if (!v) return;
+  _demandeTransfertCible = id;
+  document.getElementById("dt-titre").textContent = `DEMANDE DE TRANSFERT — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("dt-client").value = "";
+  document.getElementById("dt-destination").value = "";
+  document.getElementById("dt-date").value = new Date().toISOString().slice(0, 10);
+  openModal("modal-demande-transfert");
+}
+
+window.confirmerDemandeTransfert = async function () {
+  const client = document.getElementById("dt-client").value.trim();
+  const destination = document.getElementById("dt-destination").value;
+  const date = document.getElementById("dt-date").value;
+  if (!destination) { toast("Le showroom de destination est obligatoire", "terr"); return; }
+  if (!date) { toast("La date est obligatoire", "terr"); return; }
+  const v = _vehicules.find((x) => x.id === _demandeTransfertCible);
+  if (!v) return;
+
+  await demanderTransfertVehicule(v, { client, destination, date });
+  toast("Demande de transfert enregistrée — véhicule mis en évidence en haut du Stock");
+  closeModal("modal-demande-transfert");
+  _demandeTransfertCible = null;
 };
 
 // ---------------------------------------------------------------

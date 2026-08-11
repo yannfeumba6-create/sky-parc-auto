@@ -1,6 +1,6 @@
 import {
   ecouterArrivages, creerArrivage, majArrivage, getArrivage, supprimerArrivage,
-  entrerArrivageEnStock, arrivageChassisExisteDeja, chassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
+  entrerArrivageEnStock, arrivageChassisExisteDeja, chassis6, typeAutomatique, MODELES_PAR_MARQUE,
   importerArrivagesEnMasse, normaliserMarque, normaliserModele, modelesArrivageDisponibles, estModeleGenerique, FAMILLES_MODELES,
   marqueCorrespond, modeleCorrespond, normaliserDateTexte, ecouterVehicules, ecouterShowroom,
 } from "./data.js";
@@ -320,22 +320,29 @@ window.entrerSelectionEnStock = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
 
-  let nOk = 0, nAnnules = 0;
+  let nOk = 0, nAnnules = 0, nDoublons = 0;
   for (const id of ids) {
     const v = _arrivages.find((x) => x.id === id);
     if (!v) continue;
-    if (estModeleGenerique(v.marque, v.modele)) {
-      // Boîte à préciser au cas par cas — on ne peut pas deviner pour tout
-      // le lot en une fois, une petite fenêtre s'ouvre pour ce véhicule.
-      const resultat = await ouvrirModalEntreeStock(v);
-      if (!resultat) { nAnnules++; continue; }
-      await entrerArrivageEnStock({ ...v, modele: resultat.modeleFinal }, resultat.date);
-    } else {
-      await entrerArrivageEnStock(v, date);
+    try {
+      if (estModeleGenerique(v.marque, v.modele)) {
+        // Boîte à préciser au cas par cas — on ne peut pas deviner pour tout
+        // le lot en une fois, une petite fenêtre s'ouvre pour ce véhicule.
+        const resultat = await ouvrirModalEntreeStock(v);
+        if (!resultat) { nAnnules++; continue; }
+        await entrerArrivageEnStock({ ...v, modele: resultat.modeleFinal }, resultat.date);
+      } else {
+        await entrerArrivageEnStock(v, date);
+      }
+      nOk++;
+    } catch (e) {
+      nDoublons++;
     }
-    nOk++;
   }
-  toast(`${nOk} véhicule(s) entré(s) en stock${nAnnules ? `, ${nAnnules} laissé(s) en attente (variante non précisée)` : ""}`);
+  let msg = `${nOk} véhicule(s) entré(s) en stock`;
+  if (nAnnules) msg += `, ${nAnnules} laissé(s) en attente (variante non précisée)`;
+  if (nDoublons) msg += `, ${nDoublons} refusé(s) (châssis en double ailleurs dans l'appli)`;
+  toast(msg, nDoublons ? "terr" : "tok");
   _selection.clear();
 };
 
@@ -414,11 +421,7 @@ window.enregistrerArrivage = async function () {
     return;
   }
   if (await arrivageChassisExisteDeja(donnees.chassis, id)) {
-    toast("Ce châssis existe déjà dans les arrivages", "terr");
-    return;
-  }
-  if (await chassisExisteDeja(donnees.chassis)) {
-    toast("Ce châssis est déjà présent dans le Stock véhicule", "terr");
+    toast("Ce châssis existe déjà quelque part dans l'application (Stock parc, Prochain arrivage, Stock Showroom ou Véhicules vendus)", "terr");
     return;
   }
 
@@ -449,8 +452,12 @@ document.addEventListener("click", async (e) => {
     const resultat = await ouvrirModalEntreeStock(v);
     if (!resultat) return;
     const arrivageAEnvoyer = resultat.modeleFinal ? { ...v, modele: resultat.modeleFinal } : v;
-    await entrerArrivageEnStock(arrivageAEnvoyer, resultat.date);
-    toast("Véhicule entré dans le Stock véhicule");
+    try {
+      await entrerArrivageEnStock(arrivageAEnvoyer, resultat.date);
+      toast("Véhicule entré dans le Stock véhicule");
+    } catch (e) {
+      toast(e.message, "terr");
+    }
   }
 
   if (action === "supprimer") {

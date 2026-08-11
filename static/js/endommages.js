@@ -169,7 +169,6 @@ window.confirmerPriseEnCharge = async function () {
   const chauffeur = document.getElementById("pec-chauffeur").value.trim();
   if (!heureSortie) { toast("L'heure de sortie est obligatoire", "terr"); return; }
   if (!compagnie) { toast("La compagnie de réparation est obligatoire", "terr"); return; }
-  if (!chauffeur) { toast("Le chauffeur en charge du transfert est obligatoire", "terr"); return; }
 
   await majVehicule(_pecCible, {
     statut: "prise_en_charge",

@@ -105,7 +105,6 @@ window.confirmerSortieReserve = async function () {
   const chauffeur = document.getElementById("sr-chauffeur").value.trim();
   if (!dateSortie) { toast("La date de sortie est obligatoire", "terr"); return; }
   if (!destination) { toast("La destination est obligatoire", "terr"); return; }
-  if (!chauffeur) { toast("Le nom du chauffeur est obligatoire", "terr"); return; }
   const v = _liste.find((x) => x.id === _sortieCible);
   if (!v) return;
   await envoyerVersShowroom(v, { dateSortie, destination, chauffeur });

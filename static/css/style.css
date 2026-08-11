@@ -442,3 +442,19 @@ tr.ligne-incomplete .import-cell{color:var(--red);}
 .import-manquant-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
 .import-manquant-item label{display:block;font-size:11.5px;margin-bottom:5px;color:var(--text);}
 .import-manquant-item select{width:100%;margin-bottom:0;}
+
+/* Demande de transfert — mise en évidence de la ligne dans Stock véhicule :
+   vert clignotant les 30 premières minutes, puis vert fixe jusqu'à
+   confirmation du transfert (voir stock.js). */
+@keyframes ligneTransfertClignote {
+  0%, 100% { background-color: rgba(39,174,96,.10); }
+  50% { background-color: rgba(39,174,96,.32); }
+}
+tr.ligne-transfert-clignote {
+  animation: ligneTransfertClignote 1.4s ease-in-out infinite;
+  box-shadow: inset 3px 0 0 var(--green);
+}
+tr.ligne-transfert-attente {
+  background-color: rgba(39,174,96,.12);
+  box-shadow: inset 3px 0 0 var(--green);
+}
