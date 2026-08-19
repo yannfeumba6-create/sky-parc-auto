@@ -96,11 +96,10 @@
           <div class="form-group"><label>Immatriculation</label><input type="text" id="v-immatriculation"></div>
           <div class="form-group"><label>Marque</label><select id="v-marque" onchange="onMarqueChange()">{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
           <div class="form-group"><label>Modèle</label><select id="v-modele" required></select></div>
-          <div class="form-group"><label>Type</label><select id="v-type" onchange="onTypeChange()">{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Type</label><select id="v-type">{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
           <div class="form-group"><label>Année</label><input type="number" id="v-annee" min="1990" max="2100"></div>
-          <div class="form-group" id="v-couleurExt-wrap"><label>Couleur extérieure</label><input type="text" id="v-couleurExt" list="liste-couleurs" placeholder="Ex : Rouge, Gris métallisé…"></div>
-          <div class="form-group" id="v-couleurInt-wrap"><label>Couleur intérieure</label><input type="text" id="v-couleurInt" list="liste-couleurs" placeholder="Ex : Noir, Beige…"></div>
-          <div class="form-group" id="v-couleurCabine-wrap" style="display:none;"><label>Couleur de cabine</label><input type="text" id="v-couleurCabine" list="liste-couleurs" placeholder="Ex : Blanc, Rouge…"></div>
+          <div class="form-group"><label>Couleur extérieure</label><input type="text" id="v-couleurExt" list="liste-couleurs" placeholder="Ex : Rouge, Gris métallisé…"></div>
+          <div class="form-group"><label>Couleur intérieure</label><input type="text" id="v-couleurInt" list="liste-couleurs" placeholder="Ex : Noir, Beige…"></div>
           <datalist id="liste-couleurs"></datalist>
         </div>
 
@@ -143,7 +142,12 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title">IMPORTER DES VÉHICULES</div><button class="modal-close" onclick="fermerModalImport()">✕</button></div>
     <div class="modal-body">
-      <div class="info-box">Colonnes reconnues automatiquement, dans n'importe quel ordre : <strong>Châssis, Marque, Modèle, Date d'entrée</strong> (obligatoires), puis <strong>Couleur extérieure + Couleur intérieure</strong> (véhicules légers) <strong>ou Couleur de cabine</strong> (Camion / Camionnette), et en option Type, Emplacement, Année, Prix. Si le type n'est pas fourni, il est déduit automatiquement pour Jetour/Soueast (SUV) et JMC (Pick-up) — à préciser toi-même pour Howo Sinotruk. Formats acceptés : <strong>CSV, Excel (.xlsx/.xls) ou PDF</strong> (tableau simple).</div>
+      <div class="info-box">
+        <div style="margin-bottom:6px;"><strong>Colonnes obligatoires — ça dépend du type de véhicule :</strong></div>
+        <div>🚚 <strong>Camion (Howo Sinotruk)</strong> : Châssis, Marque, Modèle, Couleur de la cabine, Date d'entrée.</div>
+        <div>🚙 <strong>SUV / Pick-up / autre</strong> : Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure, Date d'entrée.</div>
+        <div style="margin-top:6px;">Colonnes reconnues automatiquement, dans n'importe quel ordre — l'emplacement est toujours "Parc Broli" par défaut, pas besoin de le renseigner. En option : Type, Année, Prix. Formats acceptés : <strong>CSV, Excel (.xlsx/.xls) ou PDF</strong> (tableau simple).</div>
+      </div>
 
       <label id="import-drop" for="import-file" class="import-drop">
         <div>📄 Glisse un fichier ici, colle-le avec <strong>Ctrl+V</strong>, ou clique pour choisir un fichier</div>
@@ -314,32 +318,6 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-sortie')">Annuler</button>
       <button class="btn btn-red" onclick="confirmerSortie()">Confirmer la sortie</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL — Demande de transfert (étape préalable avant la sortie réelle) -->
-<div class="modal-bg" id="modal-demande-transfert">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title" id="dt-titre">DEMANDE DE TRANSFERT</div><button class="modal-close" onclick="closeModal('modal-demande-transfert')">✕</button></div>
-    <div class="modal-body">
-      <div class="form-grid">
-        <div class="form-group"><label>Nom du client</label><input type="text" id="dt-client" placeholder="Optionnel"></div>
-        <div class="form-group">
-          <label>Showroom de destination *</label>
-          <select id="dt-destination" required>
-            <option value="">— Choisir —</option>
-            <option value="Showroom Douala">Showroom Douala</option>
-            <option value="Showroom Yaoundé">Showroom Yaoundé</option>
-            <option value="Showroom Bafoussam">Showroom Bafoussam</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Date *</label><input type="date" id="dt-date" required></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-demande-transfert')">Annuler</button>
-      <button class="btn btn-red" onclick="confirmerDemandeTransfert()">Enregistrer la demande</button>
     </div>
   </div>
 </div>

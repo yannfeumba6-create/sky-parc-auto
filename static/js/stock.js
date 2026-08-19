@@ -1,9 +1,8 @@
 import {
   ecouterVehicules, creerVehicule, majVehicule, getVehicule, envoyerVersShowroom, supprimerVehiculeDefinitivement, vendreVehicule,
-  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteEnDoublonReel, typeAutomatique, estTypeCamion, couleursValides,
-  STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
+  enregistrerHistorique, chargerHistorique, chassis6, chassisExisteDeja, typeAutomatique, estCamion, STATUT_LABEL, STATUT_BADGE, MODELES_PAR_MARQUE,
   importerVehiculesEnMasse, normaliserMarque, normaliserModele, estModeleGenerique, marqueCorrespond, modeleCorrespond, normaliserDateTexte,
-  televerserFichier, demanderTransfertVehicule, annulerDemandeTransfert,
+  televerserFichier,
 } from "./data.js";
 
 let _vehicules = [];
@@ -16,19 +15,6 @@ window.onMarqueChange = function () {
   sel.innerHTML = modeles.map((m) => `<option value="${m}">${m}</option>`).join("");
   const typeAuto = typeAutomatique(marque);
   if (typeAuto) document.getElementById("v-type").value = typeAuto;
-  onTypeChange();
-};
-
-// Camion / camionnette n'ont qu'une seule "couleur de cabine" ; tous les
-// autres types (SUV, Pick-up, Berline, Citadine — "petites voitures")
-// gardent couleur extérieure + intérieure séparées. On bascule les champs
-// visibles du formulaire selon le type choisi.
-window.onTypeChange = function () {
-  const type = document.getElementById("v-type").value;
-  const camion = estTypeCamion(type);
-  document.getElementById("v-couleurExt-wrap").style.display = camion ? "none" : "";
-  document.getElementById("v-couleurInt-wrap").style.display = camion ? "none" : "";
-  document.getElementById("v-couleurCabine-wrap").style.display = camion ? "" : "none";
 };
 
 // ---------------------------------------------------------------
@@ -110,7 +96,7 @@ function vehiculesFiltres() {
   const date = document.getElementById("f-date").value;
   const periode = document.getElementById("f-periode").value;
 
-  const resultat = _vehicules.filter((v) => {
+  return _vehicules.filter((v) => {
     if (["endommage", "prise_en_charge", "repare", "reserve"].includes(v.statut)) return false;
     if (marque && !marqueCorrespond(v.marque, marque)) return false;
     if (modele && !modeleCorrespond(v.marque, v.modele, modele)) return false;
@@ -123,19 +109,6 @@ function vehiculesFiltres() {
     }
     return true;
   });
-
-  // Un véhicule avec une demande de transfert en attente remonte
-  // automatiquement en haut du tableau (tri stable : l'ordre normal est
-  // conservé entre eux et pour le reste de la liste).
-  return resultat.sort((a, b) => (b.demandeTransfert ? 1 : 0) - (a.demandeTransfert ? 1 : 0));
-}
-
-// Minutes écoulées depuis la création d'une demande de transfert — sert à
-// savoir si la ligne doit encore clignoter (< 30 min) ou rester fixe.
-function minutesDepuisDemande(demandeTransfert) {
-  const d = demandeTransfert?.demandeLe?.toDate ? demandeTransfert.demandeLe.toDate() : null;
-  if (!d) return 0; // pas encore synchronisé depuis le serveur : traité comme "à l'instant"
-  return (Date.now() - d.getTime()) / 60000;
 }
 
 function rafraichirFiltreModeles() {
@@ -160,29 +133,17 @@ function ligneTableau(v) {
   const jours = joursDepuis(v.dateEntree);
   const critique = v.statut === "stock" && jours !== null && jours >= 60;
   const coche = _selection.has(v.id) ? "checked" : "";
-
-  let classeTransfert = "";
-  let tagTransfert = "";
-  if (v.demandeTransfert) {
-    const enClignotement = minutesDepuisDemande(v.demandeTransfert) < 30;
-    classeTransfert = enClignotement ? "ligne-transfert-clignote" : "ligne-transfert-attente";
-    const infosBulle = `Demande de transfert vers ${v.demandeTransfert.destination || "—"}` +
-      (v.demandeTransfert.client ? ` — client : ${v.demandeTransfert.client}` : "") +
-      (v.demandeTransfert.date ? ` — prévu le ${v.demandeTransfert.date}` : "");
-    tagTransfert = `<br><span class="tag badge-reserve" title="${esc(infosBulle)}">↗ ${esc(v.demandeTransfert.destination) || "Transfert demandé"}</span>`;
-  }
-
   return `
-    <tr data-id="${v.id}" class="${classeTransfert}">
+    <tr data-id="${v.id}">
       <td><input type="checkbox" class="select-ligne" data-id="${v.id}" ${coche}></td>
       <td class="plate">${esc(chassis6(v.chassis))}</td>
       <td>${esc(v.marque) || "—"}</td>
       <td>${esc(v.modele) || "—"}</td>
       <td>${esc(v.type) || "—"}</td>
       <td>${esc(v.emplacement) || "—"}</td>
-      <td style="font-size:12px;">${v.type && estTypeCamion(v.type) ? `Cabine : ${esc(v.couleurCabine) || "—"}` : `Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}`}</td>
+      <td style="font-size:12px;">Ext : ${esc(v.couleurExt) || "—"}<br>Int : ${esc(v.couleurInt) || "—"}</td>
       <td>${esc(v.annee) || "—"}</td>
-      <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}${tagTransfert}</td>
+      <td><span class="tag ${badge}">${esc(label)}</span>${critique ? `<br><span class="tag badge-endommage" style="margin-top:4px;display:inline-block;" title="En stock depuis ${jours} jours">⚠ ${jours}j</span>` : ""}</td>
       <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
       <td>${esc(v.dateEntree) || "—"}</td>
       <td style="white-space:nowrap;">
@@ -191,9 +152,6 @@ function ligneTableau(v) {
         ${v.statut === "reserve" ? `<button class="btn btn-ghost btn-sm" data-action="lever-reserve" data-id="${v.id}">Lever réservation</button>` : ""}
         ${v.statut !== "endommage" ? `<button class="btn btn-ghost btn-sm" data-action="endommager" data-id="${v.id}">Endommager</button>` : ""}
         <button class="btn btn-ghost btn-sm" data-action="historique" data-id="${v.id}">🕒</button>
-        ${!v.demandeTransfert ? `<button class="btn btn-ghost btn-sm" data-action="demande-transfert" data-id="${v.id}">Demande de transfert</button>` : `
-          <button class="btn btn-red btn-sm" data-action="confirmer-transfert-demande" data-id="${v.id}">Confirmer le transfert</button>
-          <button class="btn btn-ghost btn-sm" data-action="annuler-transfert-demande" data-id="${v.id}">Annuler la demande</button>`}
         <button class="btn btn-ghost btn-sm" data-action="sortir" data-id="${v.id}">Sortie vers showroom</button>
         <button class="btn btn-red btn-sm" data-action="vendre" data-id="${v.id}">Vendre</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-action="supprimer" data-id="${v.id}">🗑</button>
@@ -211,14 +169,6 @@ function rendreTableau() {
   }
   rendreBarreSelection();
 }
-
-// Une demande de transfert doit passer de "clignotant" à "fixe" toute
-// seule au bout de 30 minutes, même sans nouvelle donnée reçue du
-// serveur (rien ne change côté Firestore à ce moment-là) — on revérifie
-// donc périodiquement s'il y a au moins une demande encore en attente.
-setInterval(() => {
-  if (_vehicules.some((v) => v.demandeTransfert)) rendreTableau();
-}, 20000);
 
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
   document.getElementById(id).addEventListener("input", rendreTableau);
@@ -358,11 +308,9 @@ async function ouvrirEdition(id, statutForce) {
   set("v-chassis", v.chassis); set("v-immatriculation", v.immatriculation);
   set("v-marque", v.marque); onMarqueChange(); set("v-modele", v.modele); set("v-type", v.type);
   set("v-annee", v.annee); set("v-couleurExt", v.couleurExt); set("v-couleurInt", v.couleurInt);
-  set("v-couleurCabine", v.couleurCabine);
   set("v-emplacement", v.emplacement); set("v-statut", statutForce || v.statut);
   set("v-prix", v.prix); set("v-kilometrage", v.kilometrage);
   set("v-dateEntree", v.dateEntree);
-  onTypeChange();
   if (v.equipements) {
     Object.entries(v.equipements).forEach(([nom, info]) => {
       const cb = document.querySelector(`[data-equip="${nom}"]`);
@@ -388,22 +336,16 @@ function lireEquipements() {
 window.enregistrerVehicule = async function () {
   const id = document.getElementById("v-id").value;
   const statut = document.getElementById("v-statut").value;
-  const type = document.getElementById("v-type").value;
-  const camion = estTypeCamion(type);
 
   const donnees = {
     chassis: document.getElementById("v-chassis").value.trim(),
     immatriculation: document.getElementById("v-immatriculation").value.trim(),
     marque: document.getElementById("v-marque").value,
     modele: document.getElementById("v-modele").value.trim(),
-    type,
+    type: document.getElementById("v-type").value,
     annee: Number(document.getElementById("v-annee").value) || null,
-    // Un seul des deux jeux de champs couleur est pertinent selon le type
-    // (camion/camionnette = couleur de cabine ; les autres = ext. + int.) —
-    // on n'enregistre que celui qui s'applique, l'autre reste vide.
-    couleurExt: camion ? "" : document.getElementById("v-couleurExt").value,
-    couleurInt: camion ? "" : document.getElementById("v-couleurInt").value,
-    couleurCabine: camion ? document.getElementById("v-couleurCabine").value : "",
+    couleurExt: document.getElementById("v-couleurExt").value,
+    couleurInt: document.getElementById("v-couleurInt").value,
     emplacement: document.getElementById("v-emplacement").value,
     statut,
     prix: Number(document.getElementById("v-prix").value) || null,
@@ -412,39 +354,20 @@ window.enregistrerVehicule = async function () {
     equipements: lireEquipements(),
   };
 
-  if (!donnees.chassis || !donnees.marque || !donnees.modele || !donnees.dateEntree) {
-    toast("Châssis, marque, modèle et date d'entrée sont requis", "terr");
-    return;
-  }
-  if (!couleursValides(donnees)) {
-    toast(camion ? "La couleur de cabine est requise" : "Les couleurs extérieure et intérieure sont requises", "terr");
-    return;
-  }
+  if (!donnees.chassis || !donnees.modele) { toast("Châssis et modèle sont requis", "terr"); return; }
 
-  // Un châssis déjà présent dans "Prochain arrivage" n'est PAS bloqué ici :
-  // c'est l'arrivée attendue de ce véhicule qui se concrétise. creerVehicule()
-  // retire automatiquement l'entrée correspondante de la pré-liste plus bas.
-  // Seul un doublon RÉEL (déjà au Parc, en Showroom, ou déjà Vendu) est refusé.
-  if (await chassisExisteEnDoublonReel(donnees.chassis, id)) {
-    toast("Ce châssis existe déjà (Stock, Showroom ou Véhicules vendus)", "terr");
+  if (await chassisExisteDeja(donnees.chassis, id)) {
+    toast("Ce châssis existe déjà dans le parc", "terr");
     return;
   }
 
   memoriserCouleur(donnees.couleurExt);
   memoriserCouleur(donnees.couleurInt);
-  memoriserCouleur(donnees.couleurCabine);
 
-  let retireDePrelisteArrivage = false;
-  if (id) {
-    await majVehicule(id, donnees);
-  } else {
-    const resultat = await creerVehicule(donnees);
-    retireDePrelisteArrivage = resultat.retireDePrelisteArrivage;
-  }
+  if (id) await majVehicule(id, donnees);
+  else await creerVehicule(donnees);
 
-  toast(retireDePrelisteArrivage
-    ? "Véhicule entré en stock — retiré automatiquement de Prochain arrivage"
-    : "Véhicule enregistré");
+  toast("Véhicule enregistré");
   closeModal("modal-vehicule");
 };
 
@@ -474,19 +397,6 @@ document.addEventListener("click", async (e) => {
   }
   if (action === "sortir") {
     ouvrirModalSortie(id);
-  }
-  if (action === "demande-transfert") {
-    ouvrirModalDemandeTransfert(id);
-  }
-  if (action === "confirmer-transfert-demande") {
-    ouvrirModalSortie(id); // pré-rempli avec la destination/date de la demande
-  }
-  if (action === "annuler-transfert-demande") {
-    const v = _vehicules.find((x) => x.id === id);
-    if (!v) return;
-    if (!confirm(`Annuler la demande de transfert de "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) ?`)) return;
-    await annulerDemandeTransfert(v);
-    toast("Demande de transfert annulée");
   }
   if (action === "vendre") {
     ouvrirModalVenteParc(id);
@@ -554,11 +464,8 @@ function ouvrirModalSortie(id) {
   if (!v) return;
   _sortieCible = { type: "single", id };
   document.getElementById("sortie-modal-title").textContent = `SORTIE VERS SHOWROOM — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
-  // Si une demande de transfert est en attente pour ce véhicule, on
-  // pré-remplit la destination et la date déjà renseignées — l'utilisateur
-  // n'a plus qu'à compléter la checklist matériel et confirmer.
-  document.getElementById("s-dateSortie").value = v.demandeTransfert?.date || new Date().toISOString().slice(0, 10);
-  document.getElementById("s-destination").value = v.demandeTransfert?.destination || "";
+  document.getElementById("s-dateSortie").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("s-destination").value = "";
   document.getElementById("s-chauffeur").value = "";
   document.getElementById("s-equip-wrap").style.display = "block";
   remplirEquipGridSortie(v);
@@ -647,41 +554,6 @@ window.confirmerVenteParc = async function () {
   toast("Véhicule vendu — visible dans Véhicules vendus");
   closeModal("modal-vente-parc");
   _venteParcCible = null;
-};
-
-// ---------------------------------------------------------------
-// Demande de transfert — étape préalable avant l'envoi réel vers un
-// showroom (voir "sortir" / confirmerSortie plus haut). Le véhicule
-// reste en Stock véhicule mais remonte en haut du tableau et est mis en
-// évidence (vert clignotant 30 min puis fixe) jusqu'à confirmation.
-// ---------------------------------------------------------------
-
-let _demandeTransfertCible = null;
-
-function ouvrirModalDemandeTransfert(id) {
-  const v = _vehicules.find((x) => x.id === id);
-  if (!v) return;
-  _demandeTransfertCible = id;
-  document.getElementById("dt-titre").textContent = `DEMANDE DE TRANSFERT — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
-  document.getElementById("dt-client").value = "";
-  document.getElementById("dt-destination").value = "";
-  document.getElementById("dt-date").value = new Date().toISOString().slice(0, 10);
-  openModal("modal-demande-transfert");
-}
-
-window.confirmerDemandeTransfert = async function () {
-  const client = document.getElementById("dt-client").value.trim();
-  const destination = document.getElementById("dt-destination").value;
-  const date = document.getElementById("dt-date").value;
-  if (!destination) { toast("Le showroom de destination est obligatoire", "terr"); return; }
-  if (!date) { toast("La date est obligatoire", "terr"); return; }
-  const v = _vehicules.find((x) => x.id === _demandeTransfertCible);
-  if (!v) return;
-
-  await demanderTransfertVehicule(v, { client, destination, date });
-  toast("Demande de transfert enregistrée — véhicule mis en évidence en haut du Stock");
-  closeModal("modal-demande-transfert");
-  _demandeTransfertCible = null;
 };
 
 // ---------------------------------------------------------------
@@ -802,8 +674,8 @@ window.exporterCSV = function () {
 
 window.exporterTouteLaBase = function () {
   if (_vehicules.length === 0) { toast("Aucun véhicule dans la base", "tinfo"); return; }
-  const headers = ["Châssis", "Immatriculation", "Marque", "Modèle", "Type", "Emplacement", "Année", "Couleur ext.", "Couleur int.", "Couleur cabine", "Statut", "Prix", "Kilométrage", "Date entrée", "Client", "Contact client", "Date achat"];
-  const rows = _vehicules.map((v) => [v.chassis, v.immatriculation, v.marque, v.modele, v.type, v.emplacement, v.annee, v.couleurExt, v.couleurInt, v.couleurCabine, STATUT_LABEL[v.statut] || v.statut, v.prix, v.kilometrage, v.dateEntree, v.client?.nom, v.client?.contact, v.client?.dateAchat]);
+  const headers = ["Châssis", "Immatriculation", "Marque", "Modèle", "Type", "Emplacement", "Année", "Couleur ext.", "Couleur int.", "Statut", "Prix", "Kilométrage", "Date entrée", "Client", "Contact client", "Date achat"];
+  const rows = _vehicules.map((v) => [v.chassis, v.immatriculation, v.marque, v.modele, v.type, v.emplacement, v.annee, v.couleurExt, v.couleurInt, STATUT_LABEL[v.statut] || v.statut, v.prix, v.kilometrage, v.dateEntree, v.client?.nom, v.client?.contact, v.client?.dateAchat]);
   exportCSV(`base_complete_parc_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 };
 
@@ -902,11 +774,8 @@ const CHAMPS_IMPORT = [
   { cle: "marque", label: "Marque" },
   { cle: "modele", label: "Modèle" },
   { cle: "type", label: "Type" },
-  { cle: "couleurExt", label: "Couleur ext." },
+  { cle: "couleurExt", label: "Couleur ext. / cabine" },
   { cle: "couleurInt", label: "Couleur int." },
-  { cle: "couleurCabine", label: "Couleur cabine" },
-  { cle: "couleurUnique", label: "Couleur (ext./cabine selon le type)" },
-  { cle: "emplacement", label: "Emplacement" },
   { cle: CHAMP_DATE, label: "Date d'entrée" },
   { cle: "annee", label: "Année" },
   { cle: "prix", label: "Prix" },
@@ -916,9 +785,8 @@ const ALIAS_COLONNES = {
   chassis: ["chassis", "châssis", "vin", "numero de chassis", "n chassis"],
   marque: ["marque"],
   modele: ["modele", "modèle"],
-  couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color"],
+  couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color", "couleur cabine", "couleur de la cabine", "couleur"],
   couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
-  couleurCabine: ["couleur cabine", "couleur de cabine", "couleur de la cabine", "couleur cab", "cabin color"],
   [CHAMP_DATE]: ["date d entree", "date entree", "date entree en stock", "date d entree en stock"],
   type: ["type"],
   emplacement: ["emplacement", "emplacement prevu", "site"],
@@ -926,28 +794,9 @@ const ALIAS_COLONNES = {
   prix: ["prix", "prix prevu", "prix fcfa"],
 };
 
-// Mots-clés de couleurs courantes (carrosserie automobile), utilisés pour
-// reconnaître une colonne "couleur" par son CONTENU quand l'en-tête seul
-// ne suffit pas (en-tête absent, générique "Couleur", ou fichier sans
-// en-tête). Bien plus fiable que l'ancien repli ("n'importe quelle
-// colonne de texte restante"), qui pouvait absorber par erreur une
-// colonne sans rapport (immatriculation, client…) et faire passer
-// n'importe quoi pour une couleur.
-const MOTS_COULEUR = [
-  "blanc", "blanche", "noir", "noire", "gris", "grise", "argent", "argente", "argentee",
-  "rouge", "bleu", "bleue", "vert", "verte", "jaune", "orange", "marron", "beige",
-  "dore", "doree", "bordeaux", "violet", "violette", "rose", "cuivre", "chrome",
-  "ivoire", "creme", "bronze", "metallise", "metallisee", "perle", "nacre", "kaki", "turquoise",
-];
-
 function normaliser(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
-
-const estCouleur = (v) => {
-  const n = normaliser(v);
-  return MOTS_COULEUR.some((m) => n.includes(m));
-};
 
 function detecterColonnesParEntete(entete) {
   const mapping = {};
@@ -995,7 +844,6 @@ function detecterColonnesParContenu(lignes) {
     scores.push({ col: c, champ: "marque", score: fracListe(marques) });
     scores.push({ col: c, champ: "modele", score: valeurs.filter((v) => modelesTous.includes(v.toLowerCase())).length / valeurs.length });
     scores.push({ col: c, champ: "type", score: fracListe(types) });
-    scores.push({ col: c, champ: "emplacement", score: fracListe(emplacements) });
     scores.push({ col: c, champ: CHAMP_DATE, score: frac(estDate) });
     scores.push({ col: c, champ: "annee", score: frac(estAnnee) });
     scores.push({ col: c, champ: "prix", score: frac((v) => estNombre(v) && !estAnnee(v) && Number(v.replace(/\s/g, "")) >= 1000) });
@@ -1011,28 +859,14 @@ function detecterColonnesParContenu(lignes) {
     champsPris.add(s.champ);
   }
 
-  // Colonnes couleur restantes, reconnues par leur CONTENU (mots-clés
-  // couleur), pas simplement "colonne de texte non attribuée" — voir
-  // MOTS_COULEUR ci-dessus.
-  const colonnesCouleur = [];
-  for (let c = 0; c < nbCol; c++) {
+  const champsCouleur = ["couleurExt", "couleurInt"];
+  for (let c = 0; c < nbCol && champsCouleur.length; c++) {
     if (mappingParColonne[c]) continue;
     const valeurs = echantillon.map((l) => (l[c] || "").trim()).filter(Boolean);
     if (valeurs.length === 0) continue;
-    const scoreCouleur = valeurs.filter(estCouleur).length / valeurs.length;
-    if (scoreCouleur >= 0.5) colonnesCouleur.push(c);
-  }
-  if (colonnesCouleur.length >= 2) {
-    // Deux colonnes couleur : convention habituelle des fichiers du parc
-    // (extérieure puis intérieure), dans l'ordre où elles apparaissent.
-    mappingParColonne[colonnesCouleur[0]] = "couleurExt";
-    mappingParColonne[colonnesCouleur[1]] = "couleurInt";
-  } else if (colonnesCouleur.length === 1) {
-    // Une seule colonne couleur : son sens dépend du TYPE de chaque ligne
-    // (couleur de cabine pour un camion/camionnette, sinon couleur
-    // extérieure) — résolu ligne par ligne dans construireDonnees(), pas
-    // ici où on ne connaît encore que la colonne, pas la ligne.
-    mappingParColonne[colonnesCouleur[0]] = "couleurUnique";
+    const toutNumerique = valeurs.every((v) => estNombre(v));
+    if (toutNumerique) continue;
+    mappingParColonne[c] = champsCouleur.shift();
   }
 
   return mappingParColonne;
@@ -1045,19 +879,18 @@ function construireDonnees(lignesDonnees, mappingParColonne) {
       return idx === -1 ? "" : (l[idx] || "").trim();
     };
     const marque = normaliserMarque(val("marque"));
-    const type = val("type") || typeAutomatique(marque) || "";
-    const camion = estTypeCamion(type);
-    const couleurUnique = val("couleurUnique");
     return {
       chassis: val("chassis"),
       marque,
       modele: normaliserModele(marque, val("modele"), true),
-      couleurExt: camion ? "" : (val("couleurExt") || (couleurUnique ? couleurUnique : "")),
-      couleurInt: camion ? "" : val("couleurInt"),
-      couleurCabine: camion ? (val("couleurCabine") || couleurUnique) : "",
+      couleurExt: val("couleurExt"),
+      couleurInt: val("couleurInt"),
       [CHAMP_DATE]: normaliserDate(val(CHAMP_DATE)),
-      type,
-      emplacement: val("emplacement"),
+      type: val("type") || typeAutomatique(marque) || "",
+      // Un véhicule qui entre au stock est toujours physiquement livré au
+      // Parc Broli en premier (jamais directement dans un showroom) — pas
+      // besoin de le demander dans le fichier.
+      emplacement: "Parc Broli",
       annee: Number(val("annee")) || null,
       prix: Number(val("prix")) || null,
       statut: "stock",
@@ -1181,7 +1014,6 @@ function recalculerEtAfficher() {
 const CHAMPS_CONTROLES = [
   { cle: "marque", label: "Marque", options: () => optionsDe("v-marque") },
   { cle: "type", label: "Type", options: () => optionsDe("v-type") },
-  { cle: "emplacement", label: "Emplacement", options: () => optionsDe("v-emplacement") },
 ];
 
 function afficherChampsManquants() {
@@ -1229,8 +1061,22 @@ function afficherChampsManquants() {
   });
 }
 
+// Les champs obligatoires dépendent du type de véhicule :
+// - Camion (Howo Sinotruk) : châssis, marque, modèle, couleur de la
+//   cabine (stockée dans couleurExt), date d'entrée. Rien d'autre.
+// - SUV / Pick-up / autre : châssis, marque, modèle, couleur extérieure
+//   ET intérieure, date d'entrée.
+// Dans tous les cas, l'emplacement est automatique (Parc Broli) et n'est
+// donc jamais un champ requis à l'import.
+function champsObligatoires(marque) {
+  return estCamion(marque)
+    ? ["chassis", "marque", "modele", "couleurExt", CHAMP_DATE]
+    : ["chassis", "marque", "modele", "couleurExt", "couleurInt", CHAMP_DATE];
+}
+
 function estLigneValide(d) {
-  return !!(d.chassis && d.marque && d.modele && couleursValides(d) && d[CHAMP_DATE] && !estModeleGenerique(d.marque, d.modele));
+  if (estModeleGenerique(d.marque, d.modele)) return false;
+  return champsObligatoires(d.marque).every((champ) => !!d[champ]);
 }
 
 function afficherMapping() {
@@ -1272,8 +1118,8 @@ function afficherMapping() {
 
 const COLONNES_APERCU = [
   ["chassis", "Châssis"], ["marque", "Marque"], ["modele", "Modèle"],
-  ["couleurExt", "Coul. ext"], ["couleurInt", "Coul. int"], ["couleurCabine", "Coul. cabine"], [CHAMP_DATE, "Date d'entrée"],
-  ["type", "Type"], ["emplacement", "Emplacement"], ["annee", "Année"], ["prix", "Prix"],
+  ["couleurExt", "Coul. ext / cabine"], ["couleurInt", "Coul. int"], [CHAMP_DATE, "Date d'entrée"],
+  ["type", "Type"], ["annee", "Année"], ["prix", "Prix"],
 ];
 
 function afficherApercu() {
@@ -1286,22 +1132,24 @@ function afficherApercu() {
   const optionsParChamp = {
     marque: optionsDe("v-marque"),
     type: optionsDe("v-type"),
-    emplacement: optionsDe("v-emplacement"),
   };
 
   const LIMITE = 40;
   head.innerHTML = `<tr>${COLONNES_APERCU.map(([, lbl]) => `<th>${lbl}</th>`).join("")}</tr>`;
   body.innerHTML = _importDonnees.slice(0, LIMITE).map((d, i) => {
     const manquant = !estLigneValide(d);
+    const requis = champsObligatoires(d.marque);
     return `<tr data-ligne="${i}" class="${manquant ? "ligne-incomplete" : ""}">${COLONNES_APERCU.map(([champ]) => {
+      const champManquant = requis.includes(champ) && !d[champ];
+      const classes = `import-cell${champManquant ? " champ-manquant" : ""}`;
       if (optionsParChamp[champ]) {
         const valeur = d[champ] ?? "";
-        return `<td><select class="import-cell" data-ligne="${i}" data-champ="${champ}">
+        return `<td><select class="${classes}" data-ligne="${i}" data-champ="${champ}">
           <option value="">—</option>
           ${optionsParChamp[champ].map((o) => `<option value="${o}" ${o === valeur ? "selected" : ""}>${o}</option>`).join("")}
         </select></td>`;
       }
-      return `<td><input type="text" class="import-cell" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}"></td>`;
+      return `<td><input type="text" class="${classes}" data-ligne="${i}" data-champ="${champ}" value="${esc(d[champ] ?? "")}" placeholder="${champManquant ? "Obligatoire" : ""}"></td>`;
     }).join("")}</tr>`;
   }).join("");
   count.textContent = _importDonnees.length;
@@ -1321,6 +1169,11 @@ function afficherApercu() {
 
       const ligne = e.target.closest("tr");
       ligne.classList.toggle("ligne-incomplete", !estLigneValide(_importDonnees[i]));
+      const requis = champsObligatoires(_importDonnees[i].marque);
+      ligne.querySelectorAll(".import-cell").forEach((cell) => {
+        const c = cell.dataset.champ;
+        cell.classList.toggle("champ-manquant", requis.includes(c) && !_importDonnees[i][c]);
+      });
       const valides = _importDonnees.filter(estLigneValide);
       document.getElementById("import-status").textContent =
         `${_importDonnees.length} ligne(s), dont ${valides.length} avec tous les champs obligatoires.`;

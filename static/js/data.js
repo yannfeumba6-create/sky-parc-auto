@@ -148,23 +148,15 @@ export function chassis6(chassis) {
 export function typeAutomatique(marque) {
   if (marque === "Jetour" || marque === "Soueast") return "SUV";
   if (marque === "JMC") return "Pick-up";
+  if (marque === "Howo Sinotruk") return "Camion";
   return null;
 }
 
-// Camion et camionnette n'ont qu'une seule couleur pertinente (la cabine)
-// au lieu de couleur extérieure + intérieure séparées comme les autres
-// types de véhicule ("petites voitures" : SUV, Pick-up, Berline, Citadine).
-export function estTypeCamion(type) {
-  return type === "Camion" || type === "Camionnette";
-}
-
-// Vérifie que le/les champ(s) couleur requis pour CE type de véhicule
-// sont bien renseignés — couleur de cabine pour camion/camionnette,
-// couleur ext. + int. pour tous les autres types.
-export function couleursValides(donnees) {
-  return estTypeCamion(donnees.type)
-    ? !!donnees.couleurCabine
-    : !!(donnees.couleurExt && donnees.couleurInt);
+// Un camion (Howo Sinotruk) n'a qu'une seule couleur de cabine — pas de
+// distinction extérieur/intérieur comme sur un SUV/pickup. Cette
+// fonction centralise cette règle pour l'import ET la fiche véhicule.
+export function estCamion(marque) {
+  return marque === "Howo Sinotruk";
 }
 
 // Écoute en temps réel (affiche d'abord le cache local instantanément, puis
@@ -283,24 +275,6 @@ export async function chassisExisteDeja(chassis, excludeId) {
   return chassisExisteQuelquePart(chassis, excludeId);
 }
 
-// Vérifie un doublon RÉEL avant d'enregistrer un véhicule en Stock : le
-// châssis existe déjà physiquement au Parc, en Showroom, ou est déjà
-// Vendu. Volontairement SANS "Prochain arrivage" — y retrouver le même
-// châssis n'est pas un doublon, c'est l'arrivée attendue de ce véhicule
-// qui se concrétise (saisie manuelle, ou import). creerVehicule() retire
-// alors automatiquement l'entrée correspondante de la pré-liste (voir
-// retirerArrivageParChassis) au lieu de refuser l'enregistrement.
-export async function chassisExisteEnDoublonReel(chassis, excludeId) {
-  await authPrete;
-  if (!chassis) return false;
-  const chassisKey = normaliserChassis(chassis);
-  const collections = [vehiculesRef, showroomRef, archivesRef];
-  const snaps = await Promise.all(
-    collections.map((ref) => getDocs(query(ref, where("chassis", "==", chassisKey))))
-  );
-  return snaps.some((snap) => snap.docs.some((d) => d.id !== excludeId));
-}
-
 export async function creerVehicule(donnees) {
   await authPrete;
   if (donnees.chassis) donnees.chassis = normaliserChassis(donnees.chassis);
@@ -310,8 +284,8 @@ export async function creerVehicule(donnees) {
   const ref = await addDoc(vehiculesRef, donnees);
   await enregistrerHistorique("Entrée en stock", { id: ref.id, ...donnees });
   await ajusterStockEquipements({}, donnees.equipements);
-  const retireDePrelisteArrivage = (await retirerArrivageParChassis(donnees.chassis)) > 0;
-  return { id: ref.id, retireDePrelisteArrivage };
+  await retirerArrivageParChassis(donnees.chassis);
+  return ref.id;
 }
 
 // Si un véhicule portant ce châssis existe encore dans la pré-liste
@@ -320,13 +294,12 @@ export async function creerVehicule(donnees) {
 // la pré-liste elle-même.
 export async function retirerArrivageParChassis(chassis) {
   await authPrete;
-  if (!chassis) return 0;
+  if (!chassis) return;
   const q = query(arrivagesRef, where("chassis", "==", normaliserChassis(chassis)));
   const snap = await getDocs(q);
   for (const d of snap.docs) {
     await deleteDoc(doc(db, "prochains_arrivages", d.id));
   }
-  return snap.docs.length;
 }
 
 // Écoute en temps réel du stock d'équipements — à utiliser à la place d'un
@@ -409,7 +382,6 @@ export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
   const equipementsSortie = sortieInfo.equipements || vehiculeOriginal.equipements || {};
   await ajusterStockEquipements(vehiculeOriginal.equipements || {}, equipementsSortie);
   const { id, ...donnees } = vehiculeOriginal;
-  delete donnees.demandeTransfert;
   await addDoc(showroomRef, {
     ...donnees,
     equipements: equipementsSortie,
@@ -422,41 +394,6 @@ export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
   });
   await deleteDoc(doc(db, "vehicules", id));
   await enregistrerHistorique("Sortie vers showroom", { ...vehiculeOriginal, destination: sortieInfo.destination });
-}
-
-// ---------------------------------------------------------------
-// Demande de transfert — étape préalable, non destructive, avant un
-// envoi réel vers un showroom. Le véhicule reste dans Stock véhicule
-// mais porte désormais un indicateur "demandeTransfert" (destination,
-// client facultatif, date) qui le fait remonter en haut du tableau et
-// le met en évidence (vert clignotant les 30 premières minutes, puis
-// fixe) jusqu'à ce que le transfert soit réellement confirmé — via
-// "Confirmer le transfert", qui réutilise envoyerVersShowroom : le
-// champ demandeTransfert disparaît alors avec le véhicule, qui quitte
-// la collection Stock.
-// ---------------------------------------------------------------
-
-export async function demanderTransfertVehicule(vehicule, donnees) {
-  await authPrete;
-  const demandeTransfert = {
-    client: (donnees.client || "").trim(),
-    destination: donnees.destination,
-    date: donnees.date,
-    demandeLe: serverTimestamp(),
-    demandePar: window.UTILISATEUR || "",
-  };
-  await updateDoc(doc(db, "vehicules", vehicule.id), { demandeTransfert });
-  await enregistrerHistorique("Demande de transfert", {
-    chassis: vehicule.chassis, marque: vehicule.marque, modele: vehicule.modele,
-    emplacement: donnees.destination, statut: vehicule.statut, prix: vehicule.prix,
-    client: donnees.client ? { nom: donnees.client } : null,
-  });
-}
-
-export async function annulerDemandeTransfert(vehicule) {
-  await authPrete;
-  await updateDoc(doc(db, "vehicules", vehicule.id), { demandeTransfert: null });
-  await enregistrerHistorique("Annulation demande de transfert", vehicule);
 }
 
 export async function ecouterShowroom(callback) {
@@ -738,7 +675,7 @@ export async function importerArrivagesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.marque || !donnees.modele || !couleursValides(donnees)) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || (!estCamion(donnees.marque) && !donnees.couleurInt)) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;
@@ -799,7 +736,7 @@ export async function importerVehiculesEnMasse(donneesLignes, onProgress) {
     const donnees = donneesLignes[i];
     const chassisKey = normaliserChassis(donnees.chassis);
 
-    if (!chassisKey || !donnees.marque || !donnees.modele || !couleursValides(donnees) || !donnees.dateEntree) {
+    if (!chassisKey || !donnees.marque || !donnees.modele || !donnees.couleurExt || !donnees.dateEntree || (!estCamion(donnees.marque) && !donnees.couleurInt)) {
       ignorees++;
     } else if (existants.has(chassisKey) || vuDansFichier.has(chassisKey)) {
       doublons++;

@@ -128,11 +128,10 @@
           <div class="form-group"><label>Immatriculation</label><input type="text" id="v-immatriculation"></div>
           <div class="form-group"><label>Marque</label><select id="v-marque" onchange="onMarqueChange()">{% for m in marques %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
           <div class="form-group"><label>Modèle</label><select id="v-modele" required></select></div>
-          <div class="form-group"><label>Type</label><select id="v-type" onchange="onTypeChange()">{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label>Type</label><select id="v-type">{% for t in types_vehicule %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
           <div class="form-group"><label>Année</label><input type="number" id="v-annee" min="1990" max="2100"></div>
-          <div class="form-group" id="v-couleurExt-wrap"><label>Couleur extérieure</label><input type="text" id="v-couleurExt" list="liste-couleurs" placeholder="Ex : Rouge, Gris métallisé…"></div>
-          <div class="form-group" id="v-couleurInt-wrap"><label>Couleur intérieure</label><input type="text" id="v-couleurInt" list="liste-couleurs" placeholder="Ex : Noir, Beige…"></div>
-          <div class="form-group" id="v-couleurCabine-wrap" style="display:none;"><label>Couleur de cabine</label><input type="text" id="v-couleurCabine" list="liste-couleurs" placeholder="Ex : Blanc, Rouge…"></div>
+          <div class="form-group"><label>Couleur extérieure</label><input type="text" id="v-couleurExt" list="liste-couleurs" placeholder="Ex : Rouge, Gris métallisé…"></div>
+          <div class="form-group"><label>Couleur intérieure</label><input type="text" id="v-couleurInt" list="liste-couleurs" placeholder="Ex : Noir, Beige…"></div>
           <datalist id="liste-couleurs"></datalist>
         </div>
 
@@ -188,7 +187,12 @@
   <div class="modal">
     <div class="modal-header"><div class="modal-title">IMPORTER DES ARRIVAGES</div><button class="modal-close" onclick="fermerModalImport()">✕</button></div>
     <div class="modal-body">
-      <div class="info-box">Colonnes reconnues automatiquement, dans n'importe quel ordre : <strong>Châssis, Marque, Modèle</strong> (obligatoires), puis <strong>Couleur extérieure + Couleur intérieure</strong> (véhicules légers) <strong>ou Couleur de cabine</strong> (Camion / Camionnette), et en option Type, Emplacement, Date d'arrivée prévue, Année, Prix. Formats acceptés : <strong>CSV, Excel (.xlsx/.xls) ou PDF</strong> (tableau simple).</div>
+      <div class="info-box">
+        <div style="margin-bottom:6px;"><strong>Colonnes obligatoires — ça dépend du type de véhicule :</strong></div>
+        <div>🚚 <strong>Camion (Howo Sinotruk)</strong> : Châssis, Marque, Modèle, Couleur de la cabine.</div>
+        <div>🚙 <strong>SUV / Pick-up / autre</strong> : Châssis, Marque, Modèle, Couleur extérieure, Couleur intérieure.</div>
+        <div style="margin-top:6px;">Colonnes reconnues automatiquement, dans n'importe quel ordre. En option : Type, Emplacement, Date d'arrivée prévue, Année, Prix. Formats acceptés : <strong>CSV, Excel (.xlsx/.xls) ou PDF</strong> (tableau simple).</div>
+      </div>
 
       <label id="import-drop" for="import-file" class="import-drop">
         <div>📄 Glisse un fichier ici, colle-le avec <strong>Ctrl+V</strong>, ou clique pour choisir un fichier</div>
