@@ -592,7 +592,7 @@ const CHAMPS_IMPORT = [
 const ALIAS_COLONNES = {
   chassis: ["chassis", "châssis", "vin", "numero de chassis", "n chassis"],
   marque: ["marque"],
-  modele: ["modele", "modèle"],
+  modele: ["modele", "modèle", "model", "designation", "désignation", "version"],
   couleurExt: ["couleur exterieure", "couleur exterieur", "couleur ext", "exterior color", "couleur cabine", "couleur de la cabine", "couleur"],
   couleurInt: ["couleur interieure", "couleur interieur", "couleur int", "interior color"],
   [CHAMP_DATE]: ["date d arrivee prevue", "date arrivee prevue", "date d arrivee", "date arrivee", "date prevue"],
@@ -612,7 +612,7 @@ function detecterColonnesParEntete(entete) {
     const n = normaliser(brut);
     for (const [champ, alias] of Object.entries(ALIAS_COLONNES)) {
       if (mapping[champ] !== undefined) continue;
-      if (alias.some((a) => n === a || n.includes(a))) mapping[champ] = idx;
+      if (alias.some((a) => { const an = normaliser(a); return n === an || n.includes(an); })) mapping[champ] = idx;
     }
   });
   return mapping;
@@ -801,13 +801,26 @@ async function traiterFichierImport(file) {
   // ligne de données, en devinant tout par le contenu).
   _ligneEnteteExiste = Object.keys(mappingEntete).length >= 2;
 
+  const nbCol = Math.max(...lignes.map((l) => l.length));
+  _mappingParColonne = new Array(nbCol).fill("");
   if (_ligneEnteteExiste) {
-    const nbCol = Math.max(...lignes.map((l) => l.length));
-    _mappingParColonne = new Array(nbCol).fill("");
     Object.entries(mappingEntete).forEach(([champ, idx]) => { _mappingParColonne[idx] = champ; });
-  } else {
-    _mappingParColonne = detecterColonnesParContenu(lignes);
   }
+
+  // Deuxième passe, TOUJOURS effectuée : pour toute colonne encore non
+  // reconnue par son en-tête (absent, mal orthographié, en anglais...), on
+  // devine par le CONTENU des cellules elles-mêmes, pour ne jamais obliger
+  // l'utilisateur à sélectionner à la main une colonne pourtant présente
+  // dans son fichier (ex. "Modèle").
+  const donneesPourDetection = _ligneEnteteExiste ? lignes.slice(1) : lignes;
+  const mappingParContenu = detecterColonnesParContenu(donneesPourDetection);
+  const champsDejaTrouves = new Set(_mappingParColonne.filter(Boolean));
+  mappingParContenu.forEach((champ, idx) => {
+    if (champ && !_mappingParColonne[idx] && !champsDejaTrouves.has(champ)) {
+      _mappingParColonne[idx] = champ;
+      champsDejaTrouves.add(champ);
+    }
+  });
 
   recalculerEtAfficher();
   btn.disabled = _importDonnees.length === 0;
@@ -833,9 +846,10 @@ function recalculerEtAfficher() {
 // lesquels on peut proposer un remplissage groupé plutôt que de faire
 // taper chaque ligne une par une.
 const CHAMPS_CONTROLES = [
-  { cle: "marque", label: "Marque", options: () => optionsDe("v-marque") },
-  { cle: "type", label: "Type", options: () => optionsDe("v-type") },
-  { cle: "emplacement", label: "Emplacement", options: () => optionsDe("v-emplacement") },
+  { cle: "marque", label: "Marque", type: "select", options: () => optionsDe("v-marque") },
+  { cle: "type", label: "Type", type: "select", options: () => optionsDe("v-type") },
+  { cle: "emplacement", label: "Emplacement prévu", type: "select", options: () => optionsDe("v-emplacement") },
+  { cle: CHAMP_DATE, label: "Date d'arrivée prévue", type: "date" },
 ];
 
 function afficherChampsManquants() {
@@ -844,23 +858,25 @@ function afficherChampsManquants() {
 
   const blocs = CHAMPS_CONTROLES.map((c) => {
     const nManquants = _importDonnees.filter((d) => d.chassis && !d[c.cle]).length;
-    return nManquants > 0 ? { ...c, nManquants, options: c.options() } : null;
+    return nManquants > 0 ? { ...c, nManquants, options: c.type === "select" ? c.options() : null } : null;
   }).filter(Boolean);
 
   if (blocs.length === 0) { wrap.style.display = "none"; wrap.innerHTML = ""; return; }
 
   wrap.innerHTML = `
     <div class="section-lbl">Informations manquantes détectées</div>
-    <div class="info-box" style="margin-bottom:8px;">Certaines colonnes sont absentes du fichier ou vides sur plusieurs lignes. Choisis une valeur pour les remplir toutes d'un coup — tu pourras encore corriger ligne par ligne dans l'aperçu ci-dessous.</div>
+    <div class="info-box" style="margin-bottom:8px;">Certaines colonnes sont absentes du fichier ou vides sur plusieurs lignes. Choisis une valeur pour les remplir toutes d'un coup (par exemple avec le calendrier pour la date) — tu pourras encore corriger ligne par ligne dans l'aperçu ci-dessous.</div>
     <div class="import-manquants-grid">
       ${blocs.map((b) => `
         <div class="import-manquant-item">
           <label>${b.label} <span style="color:var(--muted);">(${b.nManquants} ligne${b.nManquants > 1 ? "s" : ""} sans valeur)</span></label>
           <div style="display:flex;gap:8px;">
-            <select id="manquant-${b.cle}" style="flex:1;">
-              <option value="">— Choisir —</option>
-              ${b.options.map((o) => `<option value="${o}">${o}</option>`).join("")}
-            </select>
+            ${b.type === "date"
+              ? `<input type="date" id="manquant-${b.cle}" style="flex:1;">`
+              : `<select id="manquant-${b.cle}" style="flex:1;">
+                  <option value="">— Choisir —</option>
+                  ${b.options.map((o) => `<option value="${o}">${o}</option>`).join("")}
+                </select>`}
             <button type="button" class="btn btn-ghost btn-sm" data-appliquer-manquant="${b.cle}">Appliquer à toutes</button>
           </div>
         </div>`).join("")}

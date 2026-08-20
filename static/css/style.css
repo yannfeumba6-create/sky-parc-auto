@@ -142,8 +142,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--red);box
 .import-filename{font-size:12px;color:var(--text);margin-top:8px;font-weight:600;}
 .import-preview-scroll{max-height:230px;overflow:auto;border:1.5px solid var(--border);border-radius:9px;}
 .import-preview-scroll table{width:100%;font-size:12px;}
-.import-preview-scroll th{position:sticky;top:0;background:var(--surface2);padding:7px 9px;text-align:left;border-bottom:1.5px solid var(--border);}
-.import-preview-scroll td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.import-preview-scroll th{position:sticky;top:0;background:var(--surface2);color:var(--text);font-weight:700;padding:7px 9px;text-align:left;border-bottom:2px solid var(--border);}
+.import-preview-scroll td{padding:6px 9px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text);}
 .import-progress-track{height:8px;border-radius:5px;background:var(--surface2);overflow:hidden;}
 .import-progress-bar{height:100%;width:0%;background:var(--red);transition:width .15s;}
 .import-mapping-grid{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;}
