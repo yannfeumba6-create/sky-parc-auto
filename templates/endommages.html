@@ -71,7 +71,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-prise-en-charge')">Annuler</button>
-      <button class="btn btn-red" onclick="confirmerPriseEnCharge()">Confirmer la prise en charge</button>
+      <button class="btn btn-red" onclick="confirmerPriseEnCharge(this)">Confirmer la prise en charge</button>
     </div>
   </div>
 </div>
@@ -94,8 +94,21 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-modif-masse-endommages')">Annuler</button>
-      <button class="btn btn-red" onclick="confirmerModifMasseEndommages()">Appliquer à la sélection</button>
+      <button class="btn btn-red" onclick="confirmerModifMasseEndommages(this)">Appliquer à la sélection</button>
     </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Historique des <span>réparations</span> — traçabilité des véhicules déjà endommagés</div>
+    <button class="btn btn-ghost btn-sm" id="btn-voir-historique-dommages" onclick="basculerHistoriqueDommages()">👁 Voir l'historique</button>
+  </div>
+  <div id="historique-dommages-wrap" style="display:none;overflow-x:auto;">
+    <table>
+      <thead><tr><th>Châssis</th><th>Marque</th><th>Modèle</th><th>Constat</th><th>Date constat</th><th>Compagnie</th><th>Remis en stock le</th><th>Média</th></tr></thead>
+      <tbody id="historique-dommages-body"><tr><td colspan="8" class="empty-state">Chargement…</td></tr></tbody>
+    </table>
   </div>
 </div>
 

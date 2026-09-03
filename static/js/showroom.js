@@ -179,7 +179,7 @@ function ouvrirModalVente(id) {
   openModal("modal-vente");
 }
 
-window.confirmerVente = async function () {
+window.confirmerVente = async function (bouton) { return executerUneFois("vente-showroom", async () => {
   const clientNom = document.getElementById("ve-clientNom").value.trim();
   const dateVente = document.getElementById("ve-dateVente").value;
   const prix = document.getElementById("ve-prix").value;
@@ -202,7 +202,53 @@ window.confirmerVente = async function () {
   toast("Véhicule vendu — visible dans Véhicules vendus");
   closeModal("modal-vente");
   _venteCible = null;
+}, bouton); };
+
+// ---------------------------------------------------------------
+// Vente en masse — un même client pour toute la sélection
+// ---------------------------------------------------------------
+
+window.ouvrirModalVenteMasse = function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  document.getElementById("vente-masse-titre").textContent = `VENTE DE LA SÉLECTION — ${ids.length} véhicule(s)`;
+  document.getElementById("vm-clientNom").value = "";
+  document.getElementById("vm-clientContact").value = "";
+  document.getElementById("vm-dateVente").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("vm-prix").value = "";
+  document.getElementById("vm-modePaiement").value = "";
+  document.getElementById("vm-vendeur").value = "";
+  openModal("modal-vente-masse");
 };
+
+window.confirmerVenteMasse = async function (bouton) { return executerUneFois("vente-masse-showroom", async () => {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  const clientNom = document.getElementById("vm-clientNom").value.trim();
+  const dateVente = document.getElementById("vm-dateVente").value;
+  const prix = document.getElementById("vm-prix").value;
+  if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
+  if (!dateVente) { toast("La date de vente est obligatoire", "terr"); return; }
+
+  const client = {
+    nom: clientNom,
+    contact: document.getElementById("vm-clientContact").value.trim(),
+    dateAchat: dateVente,
+    modePaiement: document.getElementById("vm-modePaiement").value.trim(),
+    vendeur: document.getElementById("vm-vendeur").value.trim(),
+  };
+
+  let n = 0;
+  for (const id of ids) {
+    const v = _showroom.find((x) => x.id === id);
+    if (!v) continue;
+    await vendreVehicule(v, { client, prix: prix ? Number(prix) : null, dateVente });
+    n++;
+  }
+  toast(`${n} véhicule(s) vendu(s) — visibles dans Véhicules vendus`);
+  closeModal("modal-vente-masse");
+  _selection.clear();
+}, bouton); };
 
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
@@ -237,8 +283,9 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+const rendreDebounced = debounce(rendre);
 ["f-recherche", "f-marque", "f-modele", "f-ville", "f-statut"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendre);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreDebounced : rendre);
   document.getElementById(id).addEventListener("change", rendre);
 });
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);

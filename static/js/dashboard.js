@@ -2,7 +2,7 @@ import { ecouterVehicules, ecouterShowroom, ecouterHistorique, ecouterArchives, 
 
 const MOIS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 const GROUPES_EMPLACEMENT = ["flux", "dommages"]; // filtres marque / modèle / emplacement
-const GROUPES_VILLE = ["ventes", "top"]; // filtres marque / modèle / ville (showroom)
+const GROUPES_VILLE = ["ventes", "ventesMarque", "top"]; // filtres marque / modèle / ville (showroom)
 
 let _vehicules = [];
 let _showroom = [];
@@ -207,8 +207,47 @@ function rendreVentes() {
 }
 
 // ---------------------------------------------------------------
+// Véhicules vendus par marque (sur l'année en cours)
+// ---------------------------------------------------------------
+
+function rendreVentesParMarque() {
+  const now = new Date();
+  const liste = filtrerVille(_archives, "ventesMarque").filter((v) => {
+    const d = toDate(dateVenteDe(v));
+    return d && d.getFullYear() === now.getFullYear();
+  });
+  const marques = window.MARQUES || [];
+  const data = marques.map((m) => liste.filter((v) => marqueCorrespond(v.marque, m)).length);
+  const tc = couleurTexte();
+  const couleurs = ["#c0392b", "#2980b9", "#27ae60", "#8e44ad", "#d35400", "#16a085"];
+  const ctx = document.getElementById("chart-ventes-marque").getContext("2d");
+  if (_charts.ventesMarque) _charts.ventesMarque.destroy();
+  _charts.ventesMarque = new Chart(ctx, {
+    type: "bar",
+    data: { labels: marques, datasets: [{ label: "Véhicules vendus", data, backgroundColor: couleurs, borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 9 } } },
+        y: { ticks: { color: tc, font: { size: 9 }, precision: 0 }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+// ---------------------------------------------------------------
 // Classement des meilleurs clients (sur l'année en cours)
 // ---------------------------------------------------------------
+
+let _topClientsVisible = false;
+window.basculerTopClients = function () {
+  _topClientsVisible = !_topClientsVisible;
+  document.getElementById("top-clients-list-wrap").style.display = _topClientsVisible ? "block" : "none";
+  document.getElementById("top-clients-filtres").style.display = _topClientsVisible ? "inline-flex" : "none";
+  document.getElementById("btn-voir-top-clients").textContent = _topClientsVisible ? "🙈 Masquer la liste" : "👁 Voir la liste";
+  if (_topClientsVisible) rendreTopClients();
+};
 
 function rendreTopClients() {
   const now = new Date();
@@ -231,10 +270,10 @@ function rendreTopClients() {
     return;
   }
   el.innerHTML = classement.map(([nom, info], i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
+    <a href="/vendus?q=${encodeURIComponent(nom)}" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;text-decoration:none;color:inherit;" title="Voir et modifier les véhicules de ce client">
       <span><b style="font-family:var(--font-title);color:var(--red);margin-right:8px;">${i + 1}</b>${esc(nom)}${info.contact ? ` — ${esc(info.contact)}` : ""}</span>
       <span class="tag badge-vendu">${info.n} véhicule${info.n > 1 ? "s" : ""} · ${info.total.toLocaleString("fr-FR")} F</span>
-    </div>`).join("");
+    </a>`).join("");
 }
 
 // ---------------------------------------------------------------
@@ -321,7 +360,8 @@ function rendreTout() {
   rendreKpis();
   rendreFlux();
   rendreVentes();
-  rendreTopClients();
+  rendreVentesParMarque();
+  if (_topClientsVisible) rendreTopClients();
   rendreDommages();
   rendreTypes();
 }

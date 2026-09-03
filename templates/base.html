@@ -106,6 +106,44 @@ document.querySelectorAll('.sidebar .nav-a').forEach(a=>a.addEventListener('clic
 
 function toast(msg,type='tok'){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'tok');setTimeout(()=>t.className='',3200);}
 
+// Empêche qu'une même action (vente, sortie, suppression…) ne parte
+// plusieurs fois si l'utilisateur clique plusieurs fois d'affilée pendant
+// que la première requête est encore en cours (réseau lent). Utilisé par
+// les fonctions de confirmation des popups (window.executerUneFois), et
+// par la protection automatique ci-dessous pour les boutons data-action.
+const _actionsEnCours = new Set();
+window.executerUneFois = async function(cle, fn, boutonOuEvenement) {
+  if (_actionsEnCours.has(cle)) return;
+  _actionsEnCours.add(cle);
+  const bouton = boutonOuEvenement && boutonOuEvenement.target ? boutonOuEvenement.target.closest('button') : boutonOuEvenement;
+  const texteOriginal = bouton ? bouton.innerHTML : null;
+  if (bouton) { bouton.disabled = true; bouton.style.opacity = '.6'; bouton.style.cursor = 'wait'; }
+  try {
+    await fn();
+  } finally {
+    _actionsEnCours.delete(cle);
+    if (bouton) { bouton.disabled = false; bouton.style.opacity = ''; bouton.style.cursor = ''; if (texteOriginal !== null) bouton.innerHTML = texteOriginal; }
+  }
+};
+
+// Protection globale contre le double-clic sur toute action déclenchée via
+// data-action="..." data-id="..." (Vendre, Sortir, Supprimer, Réserver…),
+// utilisé sur la quasi-totalité des boutons d'action ligne par ligne de
+// l'appli. Un second clic sur LE MÊME bouton pendant que le premier est
+// encore en train de s'exécuter est simplement ignoré.
+document.addEventListener('click', function(e) {
+  const bouton = e.target.closest('[data-action][data-id]');
+  if (!bouton) return;
+  const cle = 'da:' + bouton.dataset.action + ':' + bouton.dataset.id;
+  if (_actionsEnCours.has(cle)) { e.stopImmediatePropagation(); e.preventDefault(); return; }
+  _actionsEnCours.add(cle);
+  bouton.disabled = true; bouton.style.opacity = '.6'; bouton.style.cursor = 'wait';
+  setTimeout(() => {
+    _actionsEnCours.delete(cle);
+    bouton.disabled = false; bouton.style.opacity = ''; bouton.style.cursor = '';
+  }, 2500);
+}, true);
+
 // Échappe une valeur avant de l'insérer dans du HTML (innerHTML), pour éviter
 // qu'une donnée saisie par un utilisateur (nom client, châssis, import CSV…)
 // ne soit interprétée comme du code (XSS). À utiliser systématiquement pour
@@ -119,6 +157,17 @@ function esc(v){
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.addEventListener('click',e=>{if(e.target.classList.contains('modal-bg'))e.target.classList.remove('open');});
+
+// Anti-rebond générique : évite de relancer un calcul coûteux (recherche
+// dans une grande liste, filtrage) à chaque frappe clavier. Utilisé par
+// les champs de recherche des différentes pages.
+window.debounce = function(fn, delai = 180) {
+  let t;
+  return function(...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), delai);
+  };
+};
 
 // ── Export CSV ──
 function exportCSV(filename, headers, rows){
@@ -190,6 +239,12 @@ window.addEventListener('unhandledrejection', (e) => {
   const code = e.reason?.code || '';
   if (code === 'permission-denied' || /insufficient permissions/i.test(msg)) {
     toast("Accès à la base de données refusé — reconnecte-toi (⏻) ou préviens l'administrateur si ça persiste.", 'terr');
+    e.preventDefault();
+  } else if (msg) {
+    // Toute autre erreur explicite levée par l'appli (ex. doublon détecté,
+    // validation refusée) — on l'affiche telle quelle plutôt que de la
+    // laisser échouer silencieusement dans la console.
+    toast(msg, 'terr');
     e.preventDefault();
   }
 });

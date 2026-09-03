@@ -1,4 +1,4 @@
-import { ecouterVehicules, majVehicule, chassis6, STATUT_LABEL, STATUT_BADGE, marqueCorrespond } from "./data.js";
+import { ecouterVehicules, majVehicule, archiverDommageEtRemettreEnStock, ecouterDommagesHistorique, chassis6, STATUT_LABEL, STATUT_BADGE, marqueCorrespond } from "./data.js";
 
 let _tous = [];
 const _selection = new Set();
@@ -52,8 +52,8 @@ function rendre() {
       const badge = STATUT_BADGE[v.statut] || "badge-endommage";
       const label = STATUT_LABEL[v.statut] || v.statut;
       const medias = [];
-      if (v.photoDommageURL) medias.push(`<a href="${v.photoDommageURL}" target="_blank" rel="noopener">📷 Photo</a>`);
-      if (v.videoDommageURL) medias.push(`<a href="${v.videoDommageURL}" target="_blank" rel="noopener">🎥 Vidéo</a>`);
+      if (v.photoDommageURL) medias.push(`<a href="${esc(v.photoDommageURL)}" target="_blank" rel="noopener">📷 Photo</a>`);
+      if (v.videoDommageURL) medias.push(`<a href="${esc(v.videoDommageURL)}" target="_blank" rel="noopener">🎥 Vidéo</a>`);
       const pecInfo = v.compagnieReparation
         ? `<div>${esc(v.compagnieReparation)}</div><div style="color:var(--muted);">Chauffeur : ${esc(v.chauffeurTransfert) || "—"}</div><div style="color:var(--muted);">${v.heureSortiePriseEnCharge ? new Date(v.heureSortiePriseEnCharge).toLocaleString("fr-FR") : ""}</div>`
         : "—";
@@ -112,15 +112,16 @@ window.viderSelection = function () {
 
 // "Supprimer" un véhicule de la liste des Endommagés ne le supprime plus
 // jamais définitivement de la base — il est automatiquement remis en
-// stock (parc), comme si sa réparation était terminée.
+// stock (parc), comme si sa réparation était terminée. Une copie de son
+// dossier de dommage est conservée dans l'historique pour traçabilité.
 window.supprimerSelectionEndommages = async function () {
   const ids = [..._selection];
   if (ids.length === 0) return;
-  if (!confirm(`Retirer ${ids.length} véhicule(s) sélectionné(s) de la liste des Endommagés ? Ils seront automatiquement remis en Stock véhicule parc.`)) return;
+  if (!confirm(`Retirer ${ids.length} véhicule(s) sélectionné(s) de la liste des Endommagés ? Ils seront automatiquement remis en Stock véhicule parc (dossier de dommage conservé dans l'historique).`)) return;
   let n = 0;
   for (const id of ids) {
     const v = _tous.find((x) => x.id === id);
-    if (v) { await majVehicule(id, { statut: "stock", etatReparation: null }); n++; }
+    if (v) { await archiverDommageEtRemettreEnStock(v); n++; }
   }
   toast(`${n} véhicule(s) remis en stock`);
   _selection.clear();
@@ -140,7 +141,14 @@ window.confirmerModifMasseEndommages = async function () {
   const statut = document.getElementById("mme-statut").value;
   if (!statut) { toast("Choisis un état à appliquer", "terr"); return; }
   if (!confirm(`Appliquer ce changement d'état à ${ids.length} véhicule(s) sélectionné(s) ?`)) return;
-  for (const id of ids) await majVehicule(id, { statut });
+  for (const id of ids) {
+    if (statut === "stock") {
+      const v = _tous.find((x) => x.id === id);
+      if (v) await archiverDommageEtRemettreEnStock(v);
+    } else {
+      await majVehicule(id, { statut });
+    }
+  }
   toast(`${ids.length} véhicule(s) modifié(s)`);
   closeModal("modal-modif-masse-endommages");
   _selection.clear();
@@ -163,7 +171,7 @@ function ouvrirModalPriseEnCharge(id) {
   openModal("modal-prise-en-charge");
 }
 
-window.confirmerPriseEnCharge = async function () {
+window.confirmerPriseEnCharge = async function (bouton) { return executerUneFois("prise-en-charge", async () => {
   const heureSortie = document.getElementById("pec-heureSortie").value;
   const compagnie = document.getElementById("pec-compagnie").value.trim();
   const chauffeur = document.getElementById("pec-chauffeur").value.trim();
@@ -179,7 +187,7 @@ window.confirmerPriseEnCharge = async function () {
   toast("Véhicule en prise en charge — passage en orange");
   closeModal("modal-prise-en-charge");
   _pecCible = null;
-};
+}, bouton); };
 
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
@@ -197,21 +205,66 @@ document.addEventListener("click", async (e) => {
   }
 
   if (action === "remettre-stock") {
-    await majVehicule(id, { statut: "stock" });
-    toast("Véhicule remis en Stock véhicule parc");
+    await archiverDommageEtRemettreEnStock(v);
+    toast("Véhicule remis en Stock véhicule parc — dossier de dommage conservé dans l'historique");
   }
 
   if (action === "supprimer") {
-    if (!confirm(`Retirer "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) de la liste des Endommagés ? Il sera automatiquement remis en Stock véhicule parc.`)) return;
-    await majVehicule(id, { statut: "stock", etatReparation: null });
-    toast("Véhicule remis en stock");
+    if (!confirm(`Retirer "${v.marque || ""} ${v.modele || ""}" (${chassis6(v.chassis)}) de la liste des Endommagés ? Il sera automatiquement remis en Stock véhicule parc (le dossier de dommage reste consultable dans l'historique).`)) return;
+    await archiverDommageEtRemettreEnStock(v);
+    toast("Véhicule remis en stock — dossier de dommage conservé dans l'historique");
   }
 });
 
+const rendreDebounced = debounce(rendre);
 ["f-recherche", "f-marque", "f-emplacement", "f-statut"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendre);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreDebounced : rendre);
   document.getElementById(id).addEventListener("change", rendre);
 });
+
+// ---------------------------------------------------------------
+// Historique des réparations — traçabilité, chargé seulement à l'ouverture
+// (pas besoin de charger cette collection tant que personne ne la consulte)
+// ---------------------------------------------------------------
+
+let _historiqueDommagesCharge = false;
+let _historiqueDommages = [];
+
+function rendreHistoriqueDommages() {
+  const tbody = document.getElementById("historique-dommages-body");
+  if (_historiqueDommages.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><strong>Aucun historique</strong>Les dossiers de dommage archivés après remise en stock apparaîtront ici.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _historiqueDommages.map((h) => {
+    const d = h.remisEnStockLe?.toDate ? h.remisEnStockLe.toDate() : null;
+    const medias = [
+      h.photoDommageURL ? `<a href="${esc(h.photoDommageURL)}" target="_blank" rel="noopener">Photo</a>` : "",
+      h.videoDommageURL ? `<a href="${esc(h.videoDommageURL)}" target="_blank" rel="noopener">Vidéo</a>` : "",
+    ].filter(Boolean).join(" · ") || "—";
+    return `<tr>
+      <td class="plate">${esc(chassis6(h.chassis))}</td>
+      <td>${esc(h.marque) || "—"}</td>
+      <td>${esc(h.modele) || "—"}</td>
+      <td style="max-width:220px;white-space:normal;">${esc(h.piecesEndommagees) || "—"}</td>
+      <td>${esc(h.dateConstat) || "—"}</td>
+      <td>${esc(h.compagnieReparation) || "—"}</td>
+      <td>${d ? d.toLocaleString("fr-FR") : "—"}</td>
+      <td>${medias}</td>
+    </tr>`;
+  }).join("");
+}
+
+window.basculerHistoriqueDommages = function () {
+  const wrap = document.getElementById("historique-dommages-wrap");
+  const visible = wrap.style.display !== "none";
+  wrap.style.display = visible ? "none" : "block";
+  document.getElementById("btn-voir-historique-dommages").textContent = visible ? "👁 Voir l'historique" : "🙈 Masquer l'historique";
+  if (!visible && !_historiqueDommagesCharge) {
+    _historiqueDommagesCharge = true;
+    ecouterDommagesHistorique((liste) => { _historiqueDommages = liste; rendreHistoriqueDommages(); });
+  }
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   ecouterVehicules((liste) => {

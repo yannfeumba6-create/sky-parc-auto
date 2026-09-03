@@ -1,5 +1,5 @@
 import {
-  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef, showroomRef, authPrete,
+  db, vehiculesRef, historiqueRef, equipementsRef, arrivagesRef, archivesRef, showroomRef, dommagesHistoriqueRef, authPrete,
   doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch, query, where, orderBy, onSnapshot, serverTimestamp,
   televerserFichier,
 } from "./firebase-config.js";
@@ -18,7 +18,7 @@ export const STATUT_BADGE = {
 // Modèles par marque (repris du projet Sky Gestion magasin) — partagé
 // entre le formulaire véhicule, les filtres Stock et le Tableau de bord.
 export const MODELES_PAR_MARQUE = {
-  "Jetour": ["X90 Plus", "X90 Plus 4x4", "X70 Plus", "Dashing", "Dashing 4x4", "T1", "T2", "G700", "X50 M", "X50 Auto"],
+  "Jetour": ["X90 Plus", "X90 Plus 4x4", "X70 Plus", "Dashing", "Dashing 4x4", "T1", "T2", "G700", "X50 M", "X50 Auto", "X50 Premium"],
   "JMC": ["Vigus", "Grand Avenue"],
   "Soueast": ["S06", "S07", "S09"],
   "Howo Sinotruk": ["Tracteur 6x4", "Tracteur 4x2", "Benne 6x4", "Benne 8x4", "Camionnette 12T", "7T Porteur 6x4"],
@@ -372,6 +372,49 @@ export async function majVehicule(id, donnees) {
   }
 }
 
+// Avant de remettre en stock un véhicule qui était endommagé, on garde une
+// COPIE de son dossier de dommage (constat, médias, prise en charge) dans
+// une collection séparée — pour garder un historique et une traçabilité
+// des véhicules déjà endommagés, même une fois qu'ils redeviennent un
+// stock tout à fait normal.
+export async function archiverDommageEtRemettreEnStock(vehicule) {
+  await authPrete;
+  await addDoc(dommagesHistoriqueRef, {
+    vehiculeId: vehicule.id,
+    chassis: vehicule.chassis || "",
+    marque: vehicule.marque || "",
+    modele: vehicule.modele || "",
+    statutFinal: vehicule.statut || "",
+    piecesEndommagees: vehicule.piecesEndommagees || "",
+    dateConstat: vehicule.dateConstat || "",
+    photoDommageURL: vehicule.photoDommageURL || "",
+    videoDommageURL: vehicule.videoDommageURL || "",
+    heureSortiePriseEnCharge: vehicule.heureSortiePriseEnCharge || "",
+    compagnieReparation: vehicule.compagnieReparation || "",
+    chauffeurTransfert: vehicule.chauffeurTransfert || "",
+    remisEnStockLe: serverTimestamp(),
+    remisEnStockPar: window.UTILISATEUR || "",
+  });
+  await majVehicule(vehicule.id, {
+    statut: "stock",
+    piecesEndommagees: "",
+    dateConstat: "",
+    photoDommageURL: "",
+    videoDommageURL: "",
+    heureSortiePriseEnCharge: "",
+    compagnieReparation: "",
+    chauffeurTransfert: "",
+  });
+}
+
+export async function ecouterDommagesHistorique(callback) {
+  await authPrete;
+  const q = query(dommagesHistoriqueRef, orderBy("remisEnStockLe", "desc"));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
 // Transfert d'un véhicule du Stock Véhicule Parc vers le Stock Showroom
 // (destination : Douala / Yaoundé / Bafoussam) — ce n'est PAS une sortie
 // définitive : le véhicule reste vendable, simplement depuis le showroom.
@@ -379,6 +422,9 @@ export async function majVehicule(id, donnees) {
 // est rendu au stock d'équipements ; le reste voyage avec le véhicule.
 export async function envoyerVersShowroom(vehiculeOriginal, sortieInfo) {
   await authPrete;
+  if (await chassisExisteQuelquePart(vehiculeOriginal.chassis, vehiculeOriginal.id)) {
+    throw new Error("Ce châssis existe déjà ailleurs dans l'application — transfert refusé pour éviter un doublon.");
+  }
   const equipementsSortie = sortieInfo.equipements || vehiculeOriginal.equipements || {};
   await ajusterStockEquipements(vehiculeOriginal.equipements || {}, equipementsSortie);
   const { id, ...donnees } = vehiculeOriginal;
@@ -415,6 +461,9 @@ export async function majVehiculeShowroom(id, donnees) {
 // reste avec le véhicule, aucun ajustement de stock).
 export async function remettreAuParc(vehiculeShowroom) {
   await authPrete;
+  if (await chassisExisteQuelquePart(vehiculeShowroom.chassis, vehiculeShowroom.id)) {
+    throw new Error("Ce châssis existe déjà ailleurs dans l'application — retour au parc refusé pour éviter un doublon.");
+  }
   const { id, dateSortie, destination, entreShowroomLe, entreShowroomPar, ...donnees } = vehiculeShowroom;
   await addDoc(vehiculesRef, { ...donnees, statut: "stock" });
   await deleteDoc(doc(db, "vehicules_showroom", id));
@@ -437,6 +486,9 @@ export async function supprimerVehiculeShowroomDefinitivement(vehicule) {
 // éventuelle annulation de vente sache où le renvoyer.
 export async function vendreVehicule(vehicule, infosVente, collectionOrigine = "vehicules_showroom") {
   await authPrete;
+  if (await chassisExisteQuelquePart(vehicule.chassis, vehicule.id)) {
+    throw new Error("Ce châssis existe déjà ailleurs dans l'application — vente refusée pour éviter un doublon.");
+  }
   const { id, ...donnees } = vehicule;
   await addDoc(archivesRef, {
     ...donnees,
@@ -480,6 +532,9 @@ export async function ecouterArchives(callback) {
 // destination (Douala/Yaoundé/Bafoussam) = showroom, sinon = parc.
 export async function annulerVente(archive) {
   await authPrete;
+  if (await chassisExisteQuelquePart(archive.chassis, archive.id)) {
+    throw new Error("Ce châssis existe déjà ailleurs dans l'application — annulation refusée pour éviter un doublon.");
+  }
   const { id, sortiLe, sortiPar, client, prix, dateVente, statut, origineVente, ...donnees } = archive;
   const origine = origineVente || (donnees.destination ? "showroom" : "parc");
 

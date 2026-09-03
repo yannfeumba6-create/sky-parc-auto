@@ -99,7 +99,7 @@ function ouvrirModalSortieReserve(id) {
   openModal("modal-sortie-reserve");
 }
 
-window.confirmerSortieReserve = async function () {
+window.confirmerSortieReserve = async function (bouton) { return executerUneFois("sortie-reserve", async () => {
   const dateSortie = document.getElementById("sr-dateSortie").value;
   const destination = document.getElementById("sr-destination").value;
   const chauffeur = document.getElementById("sr-chauffeur").value.trim();
@@ -111,7 +111,7 @@ window.confirmerSortieReserve = async function () {
   toast("Véhicule envoyé vers le Showroom (toujours réservé)");
   closeModal("modal-sortie-reserve");
   _sortieCible = null;
-};
+}, bouton); };
 
 // ---------------------------------------------------------------
 // Vente (origine Showroom)
@@ -132,7 +132,7 @@ function ouvrirModalVenteReserve(id) {
   openModal("modal-vente-reserve");
 }
 
-window.confirmerVenteReserve = async function () {
+window.confirmerVenteReserve = async function (bouton) { return executerUneFois("vente-reserve", async () => {
   const clientNom = document.getElementById("vr-clientNom").value.trim();
   const dateVente = document.getElementById("vr-dateVente").value;
   const prix = document.getElementById("vr-prix").value;
@@ -155,10 +155,11 @@ window.confirmerVenteReserve = async function () {
   toast("Véhicule vendu — visible dans Véhicules vendus");
   closeModal("modal-vente-reserve");
   _venteCible = null;
-};
+}, bouton); };
 
+const rendreDebounced = debounce(rendre);
 ["f-recherche", "f-marque", "f-modele"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendre);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreDebounced : rendre);
   document.getElementById(id).addEventListener("change", rendre);
 });
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);

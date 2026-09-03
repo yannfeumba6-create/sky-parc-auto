@@ -63,6 +63,7 @@ export const equipementsRef = collection(db, "equipements_stock");
 export const arrivagesRef = collection(db, "prochains_arrivages");
 export const archivesRef = collection(db, "vehicules_archives");
 export const showroomRef = collection(db, "vehicules_showroom");
+export const dommagesHistoriqueRef = collection(db, "dommages_historique");
 
 // ---------------------------------------------------------------
 // Connexion à Firebase — le mot de passe est déjà vérifié côté serveur

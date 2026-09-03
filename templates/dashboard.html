@@ -59,10 +59,21 @@
 
 <div class="card">
   <div class="card-header" style="flex-wrap:wrap;gap:8px;">
-    <div class="card-title">Classement des <span>meilleurs clients</span> — entreprises ou particuliers (sur l'année)</div>
-    {{ filtres_ville('top') }}
+    <div class="card-title">Véhicules <span>vendus par marque</span></div>
+    {{ filtres_ville('ventesMarque') }}
   </div>
-  <div style="padding:14px 18px" id="top-clients-list">Chargement…</div>
+  <div style="padding:14px;height:220px"><canvas id="chart-ventes-marque"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Classement des <span>meilleurs clients</span> — entreprises ou particuliers (sur l'année)</div>
+    <button class="btn btn-ghost btn-sm" id="btn-voir-top-clients" onclick="basculerTopClients()">👁 Voir la liste</button>
+    <span id="top-clients-filtres" style="display:none;">{{ filtres_ville('top') }}</span>
+  </div>
+  <div id="top-clients-list-wrap" style="display:none;padding:14px 18px">
+    <div id="top-clients-list">Chargement…</div>
+  </div>
 </div>
 
 <div class="card">

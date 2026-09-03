@@ -55,6 +55,35 @@
   </div>
 </div>
 
+<!-- MODAL — Modification d'une fiche vendue (véhicule + client) -->
+<div class="modal-bg" id="modal-modifier-vendu">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="mv-titre">MODIFIER LA FICHE</div><button class="modal-close" onclick="closeModal('modal-modifier-vendu')">✕</button></div>
+    <div class="modal-body">
+      <div class="section-lbl">Véhicule</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Marque</label><input type="text" id="mv-marque"></div>
+        <div class="form-group"><label>Modèle</label><input type="text" id="mv-modele"></div>
+        <div class="form-group"><label>Châssis</label><input type="text" id="mv-chassis"></div>
+        <div class="form-group"><label>Prix de vente (FCFA)</label><input type="number" id="mv-prix" min="0"></div>
+        <div class="form-group"><label>Date de vente</label><input type="date" id="mv-dateVente"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="section-lbl">Client</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Nom du client / entreprise</label><input type="text" id="mv-clientNom"></div>
+        <div class="form-group"><label>Contact</label><input type="text" id="mv-clientContact"></div>
+        <div class="form-group"><label>Mode de paiement</label><input type="text" id="mv-modePaiement"></div>
+        <div class="form-group"><label>Vendeur / agent</label><input type="text" id="mv-vendeur"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-modifier-vendu')">Annuler</button>
+      <button class="btn btn-red" onclick="confirmerModifierVendu(this)">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL — Modification en masse -->
 <div class="modal-bg" id="modal-modif-masse-vendus">
   <div class="modal">
@@ -68,10 +97,11 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-modif-masse-vendus')">Annuler</button>
-      <button class="btn btn-red" onclick="confirmerModifMasseVendus()">Appliquer à la sélection</button>
+      <button class="btn btn-red" onclick="confirmerModifMasseVendus(this)">Appliquer à la sélection</button>
     </div>
   </div>
 </div>
+
 
 <div class="table-wrap card" style="overflow-x:auto;">
   <table>

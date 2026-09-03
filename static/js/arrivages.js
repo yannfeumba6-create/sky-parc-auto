@@ -165,8 +165,9 @@ function rendreTableau() {
   rendreBarreSelection();
 }
 
+const rendreTableauDebounced = debounce(rendreTableau);
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendreTableau);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreTableauDebounced : rendreTableau);
   document.getElementById(id).addEventListener("change", rendreTableau);
 });
 ["f-marque", "f-modele"].forEach((id) => {

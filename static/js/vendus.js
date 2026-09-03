@@ -90,6 +90,7 @@ function rendre() {
         <td>${esc(dateVenteDe(v)) || "—"}</td>
         <td>${v.prix ? Number(v.prix).toLocaleString("fr-FR") + " F" : "—"}</td>
         <td style="white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" data-modifier="${v.id}">✎ Modifier</button>
           <button class="btn btn-ghost btn-sm" data-facture="${v.id}">🧾 Facture</button>
           <button class="btn btn-ghost btn-sm" data-annuler="${v.id}">Annuler la vente</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--red);" data-supprimer="${v.id}">🗑</button>
@@ -176,6 +177,57 @@ window.confirmerModifMasseVendus = async function () {
   _selection.clear();
 };
 
+// ---------------------------------------------------------------
+// Modifier une fiche vendue — infos véhicule ET infos client
+// ---------------------------------------------------------------
+
+let _modifierCible = null;
+
+function ouvrirModalModifierVendu(id) {
+  const v = _vendus.find((x) => x.id === id);
+  if (!v) return;
+  _modifierCible = id;
+  document.getElementById("mv-titre").textContent = `MODIFIER — ${v.marque || ""} ${v.modele || ""} (${chassis6(v.chassis)})`;
+  document.getElementById("mv-marque").value = v.marque || "";
+  document.getElementById("mv-modele").value = v.modele || "";
+  document.getElementById("mv-chassis").value = v.chassis || "";
+  document.getElementById("mv-prix").value = v.prix || "";
+  document.getElementById("mv-dateVente").value = dateVenteDe(v) || "";
+  document.getElementById("mv-clientNom").value = v.client?.nom || "";
+  document.getElementById("mv-clientContact").value = v.client?.contact || "";
+  document.getElementById("mv-modePaiement").value = v.client?.modePaiement || "";
+  document.getElementById("mv-vendeur").value = v.client?.vendeur || "";
+  openModal("modal-modifier-vendu");
+}
+
+window.confirmerModifierVendu = async function (bouton) { return executerUneFois("modifier-vendu", async () => {
+  const v = _vendus.find((x) => x.id === _modifierCible);
+  if (!v) return;
+  const chassis = document.getElementById("mv-chassis").value.trim();
+  const clientNom = document.getElementById("mv-clientNom").value.trim();
+  if (!chassis) { toast("Le châssis est obligatoire", "terr"); return; }
+  if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
+
+  const prix = document.getElementById("mv-prix").value;
+  await majArchive(_modifierCible, {
+    marque: document.getElementById("mv-marque").value.trim(),
+    modele: document.getElementById("mv-modele").value.trim(),
+    chassis,
+    prix: prix ? Number(prix) : null,
+    dateVente: document.getElementById("mv-dateVente").value || null,
+    client: {
+      ...(v.client || {}),
+      nom: clientNom,
+      contact: document.getElementById("mv-clientContact").value.trim(),
+      modePaiement: document.getElementById("mv-modePaiement").value.trim(),
+      vendeur: document.getElementById("mv-vendeur").value.trim(),
+    },
+  });
+  toast("Fiche mise à jour");
+  closeModal("modal-modifier-vendu");
+  _modifierCible = null;
+}, bouton); };
+
 document.addEventListener("click", (e) => {
   const row = e.target.closest("[data-client]");
   if (row) {
@@ -186,6 +238,12 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("click", async (e) => {
+  const modifierBtn = e.target.closest("[data-modifier]");
+  if (modifierBtn) {
+    ouvrirModalModifierVendu(modifierBtn.dataset.modifier);
+    return;
+  }
+
   const factureBtn = e.target.closest("[data-facture]");
   if (factureBtn) {
     const v = _vendus.find((x) => x.id === factureBtn.dataset.facture);
@@ -229,8 +287,9 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+const rendreDebounced = debounce(rendre);
 ["f-recherche", "f-marque", "f-ville", "f-periode", "f-annee"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendre);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreDebounced : rendre);
   document.getElementById(id).addEventListener("change", rendre);
 });
 
@@ -257,5 +316,8 @@ window.corrigerFichesMalClassees = async function () {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  const q = params.get("q");
+  if (q) document.getElementById("f-recherche").value = q;
   ecouterArchives((liste) => { _vendus = liste; rendre(); });
 });

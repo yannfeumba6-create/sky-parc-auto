@@ -170,9 +170,10 @@ function rendreTableau() {
   rendreBarreSelection();
 }
 
+const rendreToutDebounced = debounce(rendreTout);
 ["f-recherche", "f-marque", "f-modele", "f-emplacement", "f-date", "f-periode"].forEach((id) => {
-  document.getElementById(id).addEventListener("input", rendreTableau);
-  document.getElementById(id).addEventListener("change", rendreTableau);
+  document.getElementById(id).addEventListener("input", id === "f-recherche" ? rendreToutDebounced : rendreTout);
+  document.getElementById(id).addEventListener("change", rendreTout);
 });
 document.getElementById("f-marque").addEventListener("change", rafraichirFiltreModeles);
 
@@ -482,7 +483,7 @@ function ouvrirModalSortieBulk(ids) {
   openModal("modal-sortie");
 }
 
-window.confirmerSortie = async function () {
+window.confirmerSortie = async function (bouton) { return executerUneFois("sortie-parc", async () => {
   const dateSortie = document.getElementById("s-dateSortie").value;
   const destination = document.getElementById("s-destination").value;
   const chauffeur = document.getElementById("s-chauffeur").value.trim();
@@ -508,7 +509,7 @@ window.confirmerSortie = async function () {
 
   closeModal("modal-sortie");
   _sortieCible = null;
-};
+}, bouton); };
 
 // ---------------------------------------------------------------
 // Vente directe depuis le Stock véhicule parc (sans passer par un
@@ -531,7 +532,7 @@ function ouvrirModalVenteParc(id) {
   openModal("modal-vente-parc");
 }
 
-window.confirmerVenteParc = async function () {
+window.confirmerVenteParc = async function (bouton) { return executerUneFois("vente-parc", async () => {
   const clientNom = document.getElementById("vp-clientNom").value.trim();
   const dateVente = document.getElementById("vp-dateVente").value;
   const prix = document.getElementById("vp-prix").value;
@@ -554,7 +555,53 @@ window.confirmerVenteParc = async function () {
   toast("Véhicule vendu — visible dans Véhicules vendus");
   closeModal("modal-vente-parc");
   _venteParcCible = null;
+}, bouton); };
+
+// ---------------------------------------------------------------
+// Vente en masse depuis le Parc — un même client pour toute la sélection
+// ---------------------------------------------------------------
+
+window.ouvrirModalVenteMasseParc = function () {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  document.getElementById("vmp-titre").textContent = `VENTE DE LA SÉLECTION — ${ids.length} véhicule(s)`;
+  document.getElementById("vmp-clientNom").value = "";
+  document.getElementById("vmp-clientContact").value = "";
+  document.getElementById("vmp-dateVente").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("vmp-prix").value = "";
+  document.getElementById("vmp-modePaiement").value = "";
+  document.getElementById("vmp-vendeur").value = "";
+  openModal("modal-vente-masse-parc");
 };
+
+window.confirmerVenteMasseParc = async function (bouton) { return executerUneFois("vente-masse-parc", async () => {
+  const ids = [..._selection];
+  if (ids.length === 0) return;
+  const clientNom = document.getElementById("vmp-clientNom").value.trim();
+  const dateVente = document.getElementById("vmp-dateVente").value;
+  const prix = document.getElementById("vmp-prix").value;
+  if (!clientNom) { toast("Le nom du client est obligatoire", "terr"); return; }
+  if (!dateVente) { toast("La date de vente est obligatoire", "terr"); return; }
+
+  const client = {
+    nom: clientNom,
+    contact: document.getElementById("vmp-clientContact").value.trim(),
+    dateAchat: dateVente,
+    modePaiement: document.getElementById("vmp-modePaiement").value.trim(),
+    vendeur: document.getElementById("vmp-vendeur").value.trim(),
+  };
+
+  let n = 0;
+  for (const id of ids) {
+    const v = _vehicules.find((x) => x.id === id);
+    if (!v) continue;
+    await vendreVehicule(v, { client, prix: prix ? Number(prix) : null, dateVente }, "vehicules");
+    n++;
+  }
+  toast(`${n} véhicule(s) vendu(s) — visibles dans Véhicules vendus`);
+  closeModal("modal-vente-masse-parc");
+  _selection.clear();
+}, bouton); };
 
 // ---------------------------------------------------------------
 // Signaler un dommage — constat obligatoire, date obligatoire, photo et
@@ -608,6 +655,9 @@ brancherChoixMedia("d-photo-camera", "d-photo-fichier", "d-photo-nom");
 brancherChoixMedia("d-video-camera", "d-video-fichier", "d-video-nom");
 
 window.confirmerDommage = async function () {
+  if (_actionsEnCours.has("dommage")) return;
+  _actionsEnCours.add("dommage");
+  try {
   const v = _vehicules.find((x) => x.id === _dommageCible);
   if (!v) return;
   const constat = document.getElementById("d-constat").value.trim();
@@ -619,6 +669,12 @@ window.confirmerDommage = async function () {
   const video = document.getElementById("d-video-camera").files[0] || document.getElementById("d-video-fichier").files[0];
   const statutEl = document.getElementById("d-upload-statut");
   const btn = document.getElementById("d-btn-confirmer");
+
+  // Garde-fou de taille avant tout envoi — évite qu'une vidéo ou une photo
+  // énorme (souvent une erreur de sélection) ne bloque l'appli de longues
+  // minutes ou ne consomme inutilement le stockage.
+  if (photo && photo.size > 8 * 1024 * 1024) { toast("La photo dépasse 8 Mo — choisis une image plus légère", "terr"); return; }
+  if (video && video.size > 60 * 1024 * 1024) { toast("La vidéo dépasse 60 Mo — même à 30 secondes, essaie une qualité plus basse", "terr"); return; }
 
   if (video) {
     try {
@@ -658,6 +714,9 @@ window.confirmerDommage = async function () {
   toast("Dommage signalé — véhicule transféré vers Endommagés");
   closeModal("modal-dommage");
   _dommageCible = null;
+  } finally {
+    _actionsEnCours.delete("dommage");
+  }
 };
 
 // ---------------------------------------------------------------
